@@ -36,6 +36,7 @@ const getProxiedHeaders = (
 
   headers['referer'] = targetOrigin;
   headers['origin'] = targetOrigin;
+  headers['user-agent'] = 'Mozilla/5.0 (compatible; Web-Proxy/1.0)';
 
   return headers;
 };
@@ -71,73 +72,53 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Fetch the target website
-    const response = await axios.get(targetUrl, {
-      headers: getProxiedHeaders(request.headers, parsedUrl.origin),
-      timeout: 10000,
-      maxRedirects: 5,
-      validateStatus: () => true, // Accept all status codes
-    });
+    // Fetch the target website with proper error handling
+    let response;
+    try {
+      response = await axios.get(targetUrl, {
+        headers: getProxiedHeaders(request.headers, parsedUrl.origin),
+        timeout: 15000,
+        maxRedirects: 10,
+        validateStatus: () => true,
+      });
+    } catch (fetchError) {
+      console.error('Fetch error:', fetchError);
+      return NextResponse.json(
+        { error: 'Failed to reach website' },
+        { status: 503 }
+      );
+    }
 
     const contentTypeHeader = response.headers['content-type'];
     const contentType = typeof contentTypeHeader === 'string' 
       ? contentTypeHeader 
-      : 'text/html';
+      : 'text/html; charset=utf-8';
 
-    // For HTML, inject CORS headers and modify content
+    // Return response with proper headers
+    const responseHeaders: Record<string, string> = {
+      'access-control-allow-origin': '*',
+      'access-control-allow-methods': 'GET, POST, PUT, DELETE, OPTIONS',
+      'access-control-allow-headers': 'Content-Type, Authorization',
+      'x-content-type-options': 'nosniff',
+    };
+
     if (contentType.includes('text/html')) {
-      let html = response.data;
-
-      // Add meta tag for viewport (if not present)
-      if (!html.includes('viewport')) {
-        html = html.replace(
-          /<head[^>]*>/i,
-          `$&<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no, viewport-fit=cover">`
-        );
-      }
-
-      return new NextResponse(html, {
-        status: response.status,
-        headers: {
-          'content-type': 'text/html; charset=utf-8',
-          'cache-control': 'no-cache, no-store, must-revalidate',
-          'access-control-allow-origin': '*',
-          'x-content-type-options': 'nosniff',
-          'x-frame-options': 'ALLOWALL',
-        },
-      });
+      responseHeaders['content-type'] = 'text/html; charset=utf-8';
+      responseHeaders['cache-control'] = 'no-cache, no-store, must-revalidate';
+      responseHeaders['x-frame-options'] = 'ALLOWALL';
+    } else {
+      responseHeaders['content-type'] = contentType;
+      responseHeaders['cache-control'] = 'public, max-age=3600';
     }
 
-    // For other content types, pass through
     return new NextResponse(response.data, {
       status: response.status,
-      headers: {
-        'content-type': contentType,
-        'cache-control': 'public, max-age=3600',
-        'access-control-allow-origin': '*',
-      },
+      headers: responseHeaders,
     });
   } catch (error) {
     console.error('Proxy error:', error);
-
-    if (axios.isAxiosError(error)) {
-      if (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND') {
-        return NextResponse.json(
-          { error: 'Website is unreachable' },
-          { status: 503 }
-        );
-      }
-
-      if (error.code === 'ECONNABORTED') {
-        return NextResponse.json(
-          { error: 'Request timeout' },
-          { status: 504 }
-        );
-      }
-    }
-
     return NextResponse.json(
-      { error: 'Failed to fetch website' },
+      { error: 'Internal proxy error' },
       { status: 500 }
     );
   }
