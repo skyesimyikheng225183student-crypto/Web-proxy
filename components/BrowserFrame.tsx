@@ -13,11 +13,13 @@ const BrowserFrame = ({ url, onLoad, onError }: BrowserFrameProps) => {
   const [iframeKey, setIframeKey] = useState(0);
   const [loadTimeout, setLoadTimeout] = useState<NodeJS.Timeout | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
+  const [showLogs, setShowLogs] = useState(true);
   const proxyUrl = `/api/proxy?url=${encodeURIComponent(url)}`;
 
   useEffect(() => {
     setIframeKey(prev => prev + 1);
     setLogs([`Loading ${url}...`]);
+    setShowLogs(true);
 
     // Set 10 second timeout
     const timeout = setTimeout(() => {
@@ -65,6 +67,14 @@ const BrowserFrame = ({ url, onLoad, onError }: BrowserFrameProps) => {
           </span>
         </div>
         <button
+          className={styles.debugToggle}
+          onClick={() => setShowLogs(!showLogs)}
+          aria-label={showLogs ? 'Hide debug logs' : 'Show debug logs'}
+          title={showLogs ? 'Hide logs' : 'Show logs'}
+        >
+          🐛
+        </button>
+        <button
           className={styles.closeButton}
           onClick={() => window.location.reload()}
           aria-label="Reload page"
@@ -82,7 +92,7 @@ const BrowserFrame = ({ url, onLoad, onError }: BrowserFrameProps) => {
         onError={handleIframeError}
         aria-label={`Viewing ${url}`}
       />
-      {logs.length > 0 && (
+      {showLogs && logs.length > 0 && (
         <div className={styles.debugLogs} role="log" aria-live="polite">
           <div className={styles.logsHeader}>Debug Logs</div>
           <div className={styles.logsList}>
