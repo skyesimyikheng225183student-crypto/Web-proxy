@@ -79,7 +79,10 @@ export async function GET(request: NextRequest) {
       validateStatus: () => true, // Accept all status codes
     });
 
-    const contentType = response.headers['content-type'] || 'text/html';
+    const contentTypeHeader = response.headers['content-type'];
+    const contentType = typeof contentTypeHeader === 'string' 
+      ? contentTypeHeader 
+      : 'text/html';
 
     // For HTML, inject CORS headers and modify content
     if (contentType.includes('text/html')) {
