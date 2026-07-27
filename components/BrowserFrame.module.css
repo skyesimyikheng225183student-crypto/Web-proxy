@@ -1,0 +1,92 @@
+.container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  background-color: var(--bg-color);
+  border: 1px solid var(--border-color);
+  border-radius: 0.5rem;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.frameHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem;
+  background-color: var(--secondary-color);
+  border-bottom: 1px solid var(--border-color);
+  gap: 0.5rem;
+}
+
+.urlBar {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  gap: 0.25rem;
+  min-width: 0;
+  padding: 0 0.5rem;
+  font-size: 0.75rem;
+  color: var(--text-color);
+  font-family: 'Courier New', monospace;
+}
+
+.protocol {
+  opacity: 0.6;
+  flex-shrink: 0;
+}
+
+.domain {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 1;
+}
+
+.closeButton {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  background-color: transparent;
+  border: none;
+  font-size: 1.5rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-color);
+  -webkit-appearance: none;
+  appearance: none;
+  flex-shrink: 0;
+}
+
+.closeButton:active {
+  opacity: 0.7;
+}
+
+.frame {
+  flex: 1;
+  border: none;
+  width: 100%;
+  height: 100%;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+@media (max-width: 640px) {
+  .frameHeader {
+    padding: 0.5rem;
+  }
+
+  .urlBar {
+    font-size: 0.7rem;
+    padding: 0 0.25rem;
+  }
+
+  .closeButton {
+    width: 28px;
+    height: 28px;
+    font-size: 1.25rem;
+  }
+}
