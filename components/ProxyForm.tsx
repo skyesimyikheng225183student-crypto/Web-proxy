@@ -15,7 +15,6 @@ const ProxyForm = ({ onRequest }: ProxyFormProps) => {
   const validateUrl = (urlString: string): boolean => {
     if (!urlString.trim()) return false;
     try {
-      // Add protocol if missing
       const url = urlString.startsWith('http') ? urlString : `https://${urlString}`;
       new URL(url);
       return true;
