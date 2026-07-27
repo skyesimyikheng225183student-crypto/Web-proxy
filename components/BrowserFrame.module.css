@@ -74,6 +74,46 @@
   user-select: none;
 }
 
+.debugLogs {
+  border-top: 1px solid var(--border-color);
+  background-color: var(--secondary-color);
+  max-height: 200px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 0.75rem;
+}
+
+.logsHeader {
+  font-weight: 600;
+  font-size: 0.75rem;
+  color: var(--text-color);
+  margin-bottom: 0.5rem;
+  text-transform: uppercase;
+  opacity: 0.8;
+}
+
+.logsList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.logLine {
+  font-family: 'Courier New', monospace;
+  font-size: 0.7rem;
+  color: var(--text-color);
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.logLine:has-text('ERROR') {
+  color: var(--error-color);
+}
+
+.logLine:has-text('SUCCESS') {
+  color: var(--success-color);
+}
+
 @media (max-width: 640px) {
   .frameHeader {
     padding: 0.5rem;
@@ -88,5 +128,18 @@
     width: 28px;
     height: 28px;
     font-size: 1.25rem;
+  }
+
+  .debugLogs {
+    max-height: 150px;
+    padding: 0.5rem;
+  }
+
+  .logsHeader {
+    font-size: 0.7rem;
+  }
+
+  .logLine {
+    font-size: 0.65rem;
   }
 }
