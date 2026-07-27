@@ -28,6 +28,16 @@ export default function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
+  const buildDate = new Date('2026-07-27T03:42:21Z').toLocaleString('en-US', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: true,
+  });
+
   return (
     <html lang="en">
       <head>
@@ -37,6 +47,25 @@ export default function RootLayout({
       </head>
       <body>
         {children}
+        <div
+          style={{
+            position: 'fixed',
+            bottom: '8px',
+            right: '8px',
+            fontSize: '10px',
+            opacity: 0.5,
+            fontFamily: 'monospace',
+            color: 'var(--text-color)',
+            backgroundColor: 'var(--bg-color)',
+            padding: '4px 8px',
+            borderRadius: '4px',
+            border: '1px solid var(--border-color)',
+            zIndex: 9999,
+          }}
+          title="Build timestamp - check this to see if app updated"
+        >
+          v1.0.0 • {buildDate}
+        </div>
       </body>
     </html>
   );
