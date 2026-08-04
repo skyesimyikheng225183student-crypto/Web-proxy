@@ -9,20 +9,24 @@ export default function Home() {
   const [url, setUrl] = useState<string>('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string>('');
+  const [debugLogs, setDebugLogs] = useState<string[]>([]);
 
   const handleProxyRequest = async (targetUrl: string) => {
     setUrl(targetUrl);
     setIsLoading(true);
     setError('');
+    setDebugLogs([`Requesting: ${targetUrl}`]);
   };
 
   const handleError = (errorMessage: string) => {
     setError(errorMessage);
     setIsLoading(false);
+    setDebugLogs(prev => [...prev, `ERROR: ${errorMessage}`]);
   };
 
   const handleLoad = () => {
     setIsLoading(false);
+    setDebugLogs(prev => [...prev, 'SUCCESS: Page loaded']);
   };
 
   return (
@@ -34,6 +38,29 @@ export default function Home() {
 
       <main className={styles.main} role="main">
         <ProxyForm onRequest={handleProxyRequest} />
+
+        {debugLogs.length > 0 && (
+          <div
+            style={{
+              marginTop: '1rem',
+              padding: '1rem',
+              backgroundColor: '#f5f5f5',
+              borderRadius: '0.5rem',
+              border: '1px solid #ddd',
+              maxHeight: '150px',
+              overflowY: 'auto',
+              fontFamily: 'monospace',
+              fontSize: '0.85rem',
+            }}
+          >
+            <strong>Debug Logs:</strong>
+            {debugLogs.map((log, idx) => (
+              <div key={idx} style={{ color: log.includes('ERROR') ? '#d32f2f' : '#000' }}>
+                {log}
+              </div>
+            ))}
+          </div>
+        )}
 
         {error && (
           <div
