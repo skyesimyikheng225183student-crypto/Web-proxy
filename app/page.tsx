@@ -7,25 +7,21 @@ import styles from './page.module.css';
 
 export default function Home() {
   const [url, setUrl] = useState<string>('');
-  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string>('');
   const [debugLogs, setDebugLogs] = useState<string[]>([]);
 
   const handleProxyRequest = async (targetUrl: string) => {
     setUrl(targetUrl);
-    setIsLoading(true);
     setError('');
     setDebugLogs([`Requesting: ${targetUrl}`]);
   };
 
   const handleError = (errorMessage: string) => {
     setError(errorMessage);
-    setIsLoading(false);
     setDebugLogs(prev => [...prev, `ERROR: ${errorMessage}`]);
   };
 
   const handleLoad = () => {
-    setIsLoading(false);
     setDebugLogs(prev => [...prev, 'SUCCESS: Page loaded']);
   };
 
@@ -73,14 +69,7 @@ export default function Home() {
           </div>
         )}
 
-        {isLoading && (
-          <div className={styles.loading} role="status" aria-live="polite">
-            <div className={styles.spinner}></div>
-            <p>Loading...</p>
-          </div>
-        )}
-
-        {url && !isLoading && (
+        {url && (
           <BrowserFrame
             url={url}
             onLoad={handleLoad}
