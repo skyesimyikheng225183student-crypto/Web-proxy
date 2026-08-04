@@ -28,7 +28,7 @@ export default function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const buildDate = new Date('2026-07-27T03:42:21Z').toLocaleString('en-US', {
+  const buildDate = new Date('2026-08-04T02:58:14Z').toLocaleString('en-US', {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
@@ -64,7 +64,7 @@ export default function RootLayout({
           }}
           title="Build timestamp - check this to see if app updated"
         >
-          v1.0.0 • {buildDate}
+          v2.0.0 • {buildDate}
         </div>
       </body>
     </html>
