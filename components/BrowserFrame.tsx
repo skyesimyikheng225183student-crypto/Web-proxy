@@ -21,7 +21,6 @@ const BrowserFrame = ({ url, onLoad, onError }: BrowserFrameProps) => {
     setLogs([`Loading ${url}...`]);
     setShowLogs(true);
 
-    // Set 10 second timeout
     const timeout = setTimeout(() => {
       setLogs(prev => [
         ...prev,
@@ -37,7 +36,7 @@ const BrowserFrame = ({ url, onLoad, onError }: BrowserFrameProps) => {
     setLoadTimeout(timeout);
 
     return () => {
-      if (timeout) clearTimeout(timeout);
+      clearTimeout(timeout);
     };
   }, [url, onError]);
 
@@ -76,7 +75,7 @@ const BrowserFrame = ({ url, onLoad, onError }: BrowserFrameProps) => {
         </button>
         <button
           className={styles.closeButton}
-          onClick={() => window.location.reload()}
+          onClick={() => setIframeKey(prev => prev + 1)}
           aria-label="Reload page"
         >
           ×
@@ -87,7 +86,8 @@ const BrowserFrame = ({ url, onLoad, onError }: BrowserFrameProps) => {
         src={proxyUrl}
         className={styles.frame}
         title="Proxied website content"
-        sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-top-navigation"
+        sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-presentation allow-top-navigation"
+        allow="fullscreen; autoplay; picture-in-picture; encrypted-media; presentation"
         onLoad={handleIframeLoad}
         onError={handleIframeError}
         aria-label={`Viewing ${url}`}
