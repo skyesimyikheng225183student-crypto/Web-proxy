@@ -25,8 +25,8 @@ export default function Home() {
   return (
     <div className={styles.container}>
       <header className={styles.header} role="banner">
-        <h1>Web Proxy</h1>
-        <p>Access websites freely and securely</p>
+        <h1>Web Proxy test</h1>
+        <p>currently testin, dont expect much.</p>
       </header>
 
       <main className={styles.main} role="main">
