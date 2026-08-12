@@ -29,7 +29,6 @@ const getProxiedHeaders = (
     'if-range',
     'if-none-match',
     'if-modified-since',
-    'cookie',
   ]) {
     const value = originalHeaders.get(header);
     if (value) headers[header] = value;
