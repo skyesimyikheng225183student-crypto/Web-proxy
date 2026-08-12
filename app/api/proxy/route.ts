@@ -29,6 +29,7 @@ const getProxiedHeaders = (
     'if-range',
     'if-none-match',
     'if-modified-since',
+    'cookie',
   ]) {
     const value = originalHeaders.get(header);
     if (value) headers[header] = value;
@@ -53,43 +54,84 @@ const getProxiedHeaders = (
 
 const proxyUrl = (url: string): string => `/api/proxy?url=${encodeURIComponent(url)}`;
 
-const rewriteHtml = (html: string, baseUrl: string): string => {
-  const rewrite = (value: string): string => {
-    const trimmed = value.trim();
-    if (!trimmed || trimmed.startsWith('#') || /^(data|blob|javascript|mailto|tel):/i.test(trimmed)) return value;
-    try {
-      return proxyUrl(new URL(trimmed, baseUrl).toString());
-    } catch {
-      return value;
-    }
-  };
+const rewriteUrl = (value: string, baseUrl: string): string => {
+  const trimmed = value.trim();
+  if (
+    !trimmed ||
+    trimmed.startsWith('#') ||
+    /^(data|blob|javascript|mailto|tel):/i.test(trimmed)
+  ) {
+    return value;
+  }
 
-  return html
-    .replace(/(\b(?:src|href|action|poster)\s*=\s*["'])([^"']+)(["'])/gi, (_m, prefix, value, suffix) => `${prefix}${rewrite(value)}${suffix}`)
-    .replace(/(\bsrcset\s*=\s*["'])([^"']+)(["'])/gi, (_m, prefix, value, suffix) => {
-      const rewritten = value.split(',').map((candidate: string) => {
-        const parts = candidate.trim().split(/\s+/);
-        if (!parts[0]) return candidate;
-        parts[0] = rewrite(parts[0]);
-        return parts.join(' ');
-      }).join(', ');
-      return `${prefix}${rewritten}${suffix}`;
-    })
-    .replace(/url\(\s*(["']?)([^"')]+)\1\s*\)/gi, (_m, quote, value) => `url(${quote}${rewrite(value)}${quote})`)
-    .replace(/<base\b[^>]*>/gi, '')
-    .replace(/<meta[^>]+http-equiv\s*=\s*["']content-security-policy["'][^>]*>/gi, '');
+  try {
+    return proxyUrl(new URL(trimmed, baseUrl).toString());
+  } catch {
+    return value;
+  }
 };
 
+const rewriteHtml = (html: string, baseUrl: string): string => {
+  return html
+    .replace(
+      /(\b(?:src|href|action|poster)\s*=\s*["'])([^"']+)(["'])/gi,
+      (_m, prefix, value, suffix) => `${prefix}${rewriteUrl(value, baseUrl)}${suffix}`,
+    )
+    .replace(
+      /(\bsrcset\s*=\s*["'])([^"']+)(["'])/gi,
+      (_m, prefix, value, suffix) => {
+        const rewritten = value
+          .split(',')
+          .map((candidate: string) => {
+            const parts = candidate.trim().split(/\s+/);
+            if (!parts[0]) return candidate;
+            parts[0] = rewriteUrl(parts[0], baseUrl);
+            return parts.join(' ');
+          })
+          .join(', ');
+        return `${prefix}${rewritten}${suffix}`;
+      },
+    )
+    .replace(
+      /url\(\s*(["']?)([^"')]+)\1\s*\)/gi,
+      (_m, quote, value) => `url(${quote}${rewriteUrl(value, baseUrl)}${quote})`,
+    )
+    .replace(/<base\b[^>]*>/gi, '')
+    .replace(
+      /<meta[^>]+http-equiv\s*=\s*["']content-security-policy["'][^>]*>/gi,
+      '',
+    );
+};
+
+const rewriteCss = (css: string, baseUrl: string): string =>
+  css.replace(
+    /url\(\s*(["']?)([^"')]+)\1\s*\)/gi,
+    (_m, quote, value) => `url(${quote}${rewriteUrl(value, baseUrl)}${quote})`,
+  );
+
+// Modern sites make many requests from JavaScript rather than from HTML
+// attributes. In a proxy iframe, location.origin points at the proxy host,
+// so absolute URLs built from location.origin need to be mapped back to the
+// original site's origin before being sent through /api/proxy.
 const createRuntimeBridge = (baseUrl: string): string => {
   const serializedBase = JSON.stringify(baseUrl);
   return `<script>(function(){
     var __proxyBase=${serializedBase};
+    var __proxyOrigin=location.origin;
     var __proxyPrefix='/api/proxy?url=';
+
     function __proxyTarget(input){
       var raw=typeof input==='string'?input:(input&&input.url);
       if(!raw) return null;
       try{
         var resolved=new URL(raw,__proxyBase);
+
+        // JavaScript on the proxied page may resolve '/path' against the
+        // proxy iframe's own origin. Map that back to the original site.
+        if(resolved.origin===__proxyOrigin && resolved.pathname!=='/api/proxy'){
+          resolved=new URL(resolved.pathname+resolved.search+resolved.hash,__proxyBase);
+        }
+
         if(resolved.pathname==='/api/proxy' && resolved.searchParams.has('url')) return null;
         return __proxyPrefix+encodeURIComponent(resolved.toString());
       }catch(e){return null;}
@@ -118,6 +160,24 @@ const createRuntimeBridge = (baseUrl: string): string => {
         return __beacon(target||url,data);
       };
     }
+
+    var __windowOpen=window.open;
+    window.open=function(url,target,features){
+      var proxied=__proxyTarget(url);
+      return __windowOpen.call(this,proxied||url,target,features);
+    };
+
+    var __setAttribute=Element.prototype.setAttribute;
+    Element.prototype.setAttribute=function(name,value){
+      if(/^(src|href|action|poster)$/i.test(name)){
+        var tag=this.tagName;
+        if(tag==='SCRIPT'||tag==='IMG'||tag==='IFRAME'||tag==='VIDEO'||tag==='AUDIO'||tag==='SOURCE'||tag==='LINK'||tag==='FORM'||tag==='OBJECT'){
+          var target=__proxyTarget(value);
+          if(target) value=target;
+        }
+      }
+      return __setAttribute.call(this,name,value);
+    };
   })();</script>`;
 };
 
@@ -140,10 +200,15 @@ const validateTarget = (targetUrl: string): URL | NextResponse => {
   return parsedUrl;
 };
 
-const proxyRequest = async (request: NextRequest, method: 'GET' | 'POST' | 'HEAD') => {
+const proxyRequest = async (
+  request: NextRequest,
+  method: 'GET' | 'POST' | 'HEAD',
+) => {
   try {
     const targetUrl = new URL(request.url).searchParams.get('url');
-    if (!targetUrl) return NextResponse.json({ error: 'URL parameter is required' }, { status: 400 });
+    if (!targetUrl) {
+      return NextResponse.json({ error: 'URL parameter is required' }, { status: 400 });
+    }
 
     const validated = validateTarget(targetUrl);
     if (validated instanceof NextResponse) return validated;
@@ -169,8 +234,12 @@ const proxyRequest = async (request: NextRequest, method: 'GET' | 'POST' | 'HEAD
     }
 
     const rawContentType = response.headers['content-type'];
-    const contentType = typeof rawContentType === 'string' ? rawContentType : 'application/octet-stream';
-    const isHtml = contentType.toLowerCase().includes('text/html');
+    const contentType = typeof rawContentType === 'string'
+      ? rawContentType
+      : 'application/octet-stream';
+    const lowerContentType = contentType.toLowerCase();
+    const isHtml = lowerContentType.includes('text/html');
+    const isCss = lowerContentType.includes('text/css');
     const finalUrl = response.request?.res?.responseUrl || targetUrl;
 
     const responseHeaders: Record<string, string> = {
@@ -189,9 +258,6 @@ const proxyRequest = async (request: NextRequest, method: 'GET' | 'POST' | 'HEAD
     }
 
     if (isHtml) {
-      // The HTML is modified below, so the upstream Content-Length is no
-      // longer valid. Sending the old length can make browsers truncate the
-      // document and results in a completely blank iframe.
       delete responseHeaders['content-length'];
       delete responseHeaders['content-range'];
       delete responseHeaders['accept-ranges'];
@@ -199,9 +265,25 @@ const proxyRequest = async (request: NextRequest, method: 'GET' | 'POST' | 'HEAD
       responseHeaders['content-type'] = 'text/html; charset=utf-8';
       const body = Buffer.from(response.data).toString('utf8');
       const rewritten = rewriteHtml(body, finalUrl);
-      const bridged = rewritten.replace(/<head\b[^>]*>/i, match => `${match}${createRuntimeBridge(finalUrl)}`);
+      const bridged = rewritten.replace(
+        /<head\b[^>]*>/i,
+        match => `${match}${createRuntimeBridge(finalUrl)}`,
+      );
 
       return new NextResponse(bridged, {
+        status: response.status,
+        headers: responseHeaders,
+      });
+    }
+
+    if (isCss) {
+      delete responseHeaders['content-length'];
+      delete responseHeaders['content-range'];
+      delete responseHeaders['accept-ranges'];
+      responseHeaders['content-type'] = 'text/css; charset=utf-8';
+
+      const css = Buffer.from(response.data).toString('utf8');
+      return new NextResponse(rewriteCss(css, finalUrl), {
         status: response.status,
         headers: responseHeaders,
       });
