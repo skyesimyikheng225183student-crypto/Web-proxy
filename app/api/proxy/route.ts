@@ -13,12 +13,25 @@ const BLOCKED_PATTERNS = [
 const isBlockedDomain = (hostname: string): boolean =>
   BLOCKED_PATTERNS.some(pattern => pattern.test(hostname));
 
-const getProxiedHeaders = (originalHeaders: Headers, targetOrigin: string): Record<string, string> => {
+const getProxiedHeaders = (
+  originalHeaders: Headers,
+  targetOrigin: string,
+  includeContentHeaders = false,
+): Record<string, string> => {
   const headers: Record<string, string> = {};
+
   for (const header of ['accept', 'accept-language', 'cache-control']) {
     const value = originalHeaders.get(header);
     if (value) headers[header] = value;
   }
+
+  if (includeContentHeaders) {
+    for (const header of ['content-type', 'content-length']) {
+      const value = originalHeaders.get(header);
+      if (value) headers[header] = value;
+    }
+  }
+
   headers['referer'] = targetOrigin + '/';
   headers['origin'] = targetOrigin;
   headers['user-agent'] = 'Mozilla/5.0 (compatible; Web-Proxy/1.0)';
@@ -38,7 +51,7 @@ const rewriteHtml = (html: string, baseUrl: string): string => {
     }
   };
 
-  let result = html
+  return html
     .replace(/(\b(?:src|href|action|poster)\s*=\s*["'])([^"']+)(["'])/gi, (_m, prefix, value, suffix) => `${prefix}${rewrite(value)}${suffix}`)
     .replace(/(\bsrcset\s*=\s*["'])([^"']+)(["'])/gi, (_m, prefix, value, suffix) => {
       const rewritten = value.split(',').map((candidate: string) => {
@@ -52,37 +65,48 @@ const rewriteHtml = (html: string, baseUrl: string): string => {
     .replace(/url\(\s*(["']?)([^"')]+)\1\s*\)/gi, (_m, quote, value) => `url(${quote}${rewrite(value)}${quote})`)
     .replace(/<base\b[^>]*>/gi, '')
     .replace(/<meta[^>]+http-equiv\s*=\s*["']content-security-policy["'][^>]*>/gi, '');
-
-  return result;
 };
 
-export async function GET(request: NextRequest) {
+const validateTarget = (targetUrl: string): URL | NextResponse => {
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(targetUrl);
+  } catch {
+    return NextResponse.json({ error: 'Invalid URL format' }, { status: 400 });
+  }
+
+  if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
+    return NextResponse.json({ error: 'Only HTTP and HTTPS URLs are supported' }, { status: 400 });
+  }
+
+  if (isBlockedDomain(parsedUrl.hostname)) {
+    return NextResponse.json({ error: 'Access to this domain is not allowed' }, { status: 403 });
+  }
+
+  return parsedUrl;
+};
+
+const proxyRequest = async (request: NextRequest, method: 'GET' | 'POST') => {
   try {
     const targetUrl = new URL(request.url).searchParams.get('url');
     if (!targetUrl) return NextResponse.json({ error: 'URL parameter is required' }, { status: 400 });
 
-    let parsedUrl: URL;
-    try {
-      parsedUrl = new URL(targetUrl);
-    } catch {
-      return NextResponse.json({ error: 'Invalid URL format' }, { status: 400 });
-    }
-
-    if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
-      return NextResponse.json({ error: 'Only HTTP and HTTPS URLs are supported' }, { status: 400 });
-    }
-    if (isBlockedDomain(parsedUrl.hostname)) {
-      return NextResponse.json({ error: 'Access to this domain is not allowed' }, { status: 403 });
-    }
+    const validated = validateTarget(targetUrl);
+    if (validated instanceof NextResponse) return validated;
+    const parsedUrl = validated;
 
     let response;
     try {
-      response = await axios.get(targetUrl, {
-        headers: getProxiedHeaders(request.headers, parsedUrl.origin),
-        timeout: 15000,
+      const body = method === 'POST' ? Buffer.from(await request.arrayBuffer()) : undefined;
+
+      response = await axios.request({
+        method,
+        url: targetUrl,
+        headers: getProxiedHeaders(request.headers, parsedUrl.origin, method === 'POST'),
+        data: body,
+        timeout: 20000,
         maxRedirects: 10,
-        responseType: 'text',
-        transformResponse: [(data) => data],
+        responseType: 'arraybuffer',
         validateStatus: () => true,
       });
     } catch (fetchError) {
@@ -96,7 +120,7 @@ export async function GET(request: NextRequest) {
 
     const responseHeaders: Record<string, string> = {
       'access-control-allow-origin': '*',
-      'access-control-allow-methods': 'GET, OPTIONS',
+      'access-control-allow-methods': 'GET, POST, OPTIONS',
       'access-control-allow-headers': 'Content-Type, Authorization',
       'x-content-type-options': 'nosniff',
       'cache-control': isHtml ? 'no-cache, no-store, must-revalidate' : 'public, max-age=3600',
@@ -105,15 +129,30 @@ export async function GET(request: NextRequest) {
 
     if (isHtml) {
       responseHeaders['content-type'] = 'text/html; charset=utf-8';
-      const body = typeof response.data === 'string' ? response.data : String(response.data);
-      return new NextResponse(rewriteHtml(body, parsedUrl.toString()), { status: response.status, headers: responseHeaders });
+      const body = Buffer.from(response.data).toString('utf8');
+      return new NextResponse(rewriteHtml(body, parsedUrl.toString()), {
+        status: response.status,
+        headers: responseHeaders,
+      });
     }
 
-    return new NextResponse(response.data, { status: response.status, headers: responseHeaders });
+    // Keep images, fonts, video, audio, JavaScript, CSS, and other binary resources intact.
+    return new NextResponse(new Uint8Array(response.data), {
+      status: response.status,
+      headers: responseHeaders,
+    });
   } catch (error) {
     console.error('Proxy error:', error);
     return NextResponse.json({ error: 'Internal proxy error' }, { status: 500 });
   }
+};
+
+export async function GET(request: NextRequest) {
+  return proxyRequest(request, 'GET');
+}
+
+export async function POST(request: NextRequest) {
+  return proxyRequest(request, 'POST');
 }
 
 export async function OPTIONS() {
@@ -121,7 +160,7 @@ export async function OPTIONS() {
     status: 204,
     headers: {
       'access-control-allow-origin': '*',
-      'access-control-allow-methods': 'GET, OPTIONS',
+      'access-control-allow-methods': 'GET, POST, OPTIONS',
       'access-control-allow-headers': 'Content-Type, Authorization',
     },
   });
