@@ -20,7 +20,6 @@ const getProxiedHeaders = (
 ): Record<string, string> => {
   const headers: Record<string, string> = {};
 
-  // Preserve browser negotiation headers that are useful to modern sites.
   for (const header of [
     'accept',
     'accept-language',
@@ -45,8 +44,6 @@ const getProxiedHeaders = (
   headers['referer'] = targetOrigin + '/';
   headers['origin'] = targetOrigin;
 
-  // Keep the real browser user agent when available. This is important for
-  // sites such as YouTube that serve different clients based on the UA.
   if (!headers['user-agent']) {
     headers['user-agent'] = 'Mozilla/5.0 (compatible; Web-Proxy/1.0)';
   }
@@ -83,11 +80,6 @@ const rewriteHtml = (html: string, baseUrl: string): string => {
     .replace(/<meta[^>]+http-equiv\s*=\s*["']content-security-policy["'][^>]*>/gi, '');
 };
 
-// Static HTML rewriting is not enough for modern sites. Their JavaScript
-// commonly calls fetch(), XHR, or sendBeacon() with relative URLs such as
-// /youtubei/v1/player. Those requests otherwise hit our own /api/proxy route
-// without a `url` query parameter. This bridge makes those browser APIs route
-// through the same proxy while preserving normal relative-URL behaviour.
 const createRuntimeBridge = (baseUrl: string): string => {
   const serializedBase = JSON.stringify(baseUrl);
   return `<script>(function(){
@@ -191,13 +183,19 @@ const proxyRequest = async (request: NextRequest, method: 'GET' | 'POST' | 'HEAD
       'content-type': contentType,
     };
 
-    // Preserve range/streaming metadata for video and audio players.
     for (const header of ['content-length', 'content-range', 'accept-ranges', 'etag', 'last-modified']) {
       const value = response.headers[header];
       if (typeof value === 'string') responseHeaders[header] = value;
     }
 
     if (isHtml) {
+      // The HTML is modified below, so the upstream Content-Length is no
+      // longer valid. Sending the old length can make browsers truncate the
+      // document and results in a completely blank iframe.
+      delete responseHeaders['content-length'];
+      delete responseHeaders['content-range'];
+      delete responseHeaders['accept-ranges'];
+
       responseHeaders['content-type'] = 'text/html; charset=utf-8';
       const body = Buffer.from(response.data).toString('utf8');
       const rewritten = rewriteHtml(body, finalUrl);
@@ -209,7 +207,6 @@ const proxyRequest = async (request: NextRequest, method: 'GET' | 'POST' | 'HEAD
       });
     }
 
-    // Keep images, fonts, video, audio, JavaScript, CSS, and other binary resources intact.
     return new NextResponse(method === 'HEAD' ? null : new Uint8Array(response.data), {
       status: response.status,
       headers: responseHeaders,
