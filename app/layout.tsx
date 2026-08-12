@@ -2,8 +2,8 @@ import type { Metadata, Viewport } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Web Proxy - Access Freely',
-  description: 'Accessible web proxy for bypassing simple web restrictions',
+  title: 'test web proxy',
+  description: 'is cool ig',
   manifest: '/manifest.json',
   icons: {
     apple: '/apple-icon.png',
