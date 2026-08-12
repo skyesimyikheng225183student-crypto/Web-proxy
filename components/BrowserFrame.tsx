@@ -86,8 +86,8 @@ const BrowserFrame = ({ url, onLoad, onError }: BrowserFrameProps) => {
         src={proxyUrl}
         className={styles.frame}
         title="Proxied website content"
-        sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-presentation allow-top-navigation"
-        allow="fullscreen; autoplay; picture-in-picture; encrypted-media; presentation"
+        sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-presentation allow-top-navigation allow-storage-access-by-user-activation allow-downloads allow-modals allow-pointer-lock"
+        allow="fullscreen; autoplay; picture-in-picture; encrypted-media; presentation; clipboard-read; clipboard-write"
         onLoad={handleIframeLoad}
         onError={handleIframeError}
         aria-label={`Viewing ${url}`}
