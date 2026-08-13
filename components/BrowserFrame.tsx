@@ -9,12 +9,33 @@ interface BrowserFrameProps {
   onError: (error: string) => void;
 }
 
+interface ProxyDebugMessage {
+  __webProxyDebug?: boolean;
+  type?: string;
+  details?: Record<string, unknown>;
+}
+
 const BrowserFrame = ({ url, onLoad, onError }: BrowserFrameProps) => {
   const [iframeKey, setIframeKey] = useState(0);
   const [loadTimeout, setLoadTimeout] = useState<NodeJS.Timeout | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
   const [showLogs, setShowLogs] = useState(true);
   const proxyUrl = `/api/proxy?url=${encodeURIComponent(url)}`;
+
+  useEffect(() => {
+    const handleProxyDebug = (event: MessageEvent<ProxyDebugMessage>) => {
+      if (!event.data || event.data.__webProxyDebug !== true) return;
+
+      const details = event.data.details ? ` ${JSON.stringify(event.data.details)}` : '';
+      setLogs(prev => {
+        const next = [...prev, `PROXY ${event.data.type || 'EVENT'}${details}`];
+        return next.length > 250 ? next.slice(next.length - 250) : next;
+      });
+    };
+
+    window.addEventListener('message', handleProxyDebug);
+    return () => window.removeEventListener('message', handleProxyDebug);
+  }, []);
 
   useEffect(() => {
     setIframeKey(prev => prev + 1);
