@@ -108,10 +108,6 @@ const rewriteCss = (css: string, baseUrl: string): string =>
     (_m, quote, value) => `url(${quote}${rewriteUrl(value, baseUrl)}${quote})`,
   );
 
-// Modern sites make many requests from JavaScript rather than from HTML
-// attributes. In a proxy iframe, location.origin points at the proxy host,
-// so absolute URLs built from location.origin need to be mapped back to the
-// original site's origin before being sent through /api/proxy.
 const createRuntimeBridge = (baseUrl: string): string => {
   const serializedBase = JSON.stringify(baseUrl);
   return `<script>(function(){
@@ -124,13 +120,9 @@ const createRuntimeBridge = (baseUrl: string): string => {
       if(!raw) return null;
       try{
         var resolved=new URL(raw,__proxyBase);
-
-        // JavaScript on the proxied page may resolve '/path' against the
-        // proxy iframe's own origin. Map that back to the original site.
         if(resolved.origin===__proxyOrigin && resolved.pathname!=='/api/proxy'){
           resolved=new URL(resolved.pathname+resolved.search+resolved.hash,__proxyBase);
         }
-
         if(resolved.pathname==='/api/proxy' && resolved.searchParams.has('url')) return null;
         return __proxyPrefix+encodeURIComponent(resolved.toString());
       }catch(e){return null;}
@@ -199,12 +191,28 @@ const validateTarget = (targetUrl: string): URL | NextResponse => {
   return parsedUrl;
 };
 
+const getTargetUrl = (requestUrl: string): string | null => {
+  const incoming = new URL(requestUrl);
+  const targetUrl = incoming.searchParams.get('url');
+  if (!targetUrl) return null;
+
+  // A rewritten form/link can look like:
+  // /api/proxy?url=https%3A%2F%2Fwww.google.com%2Fsearch&q=test
+  // Preserve the extra query parameters when forwarding to the destination.
+  const target = new URL(targetUrl);
+  incoming.searchParams.forEach((value, key) => {
+    if (key !== 'url') target.searchParams.append(key, value);
+  });
+
+  return target.toString();
+};
+
 const proxyRequest = async (
   request: NextRequest,
   method: 'GET' | 'POST' | 'HEAD',
 ) => {
   try {
-    const targetUrl = new URL(request.url).searchParams.get('url');
+    const targetUrl = getTargetUrl(request.url);
     if (!targetUrl) {
       return NextResponse.json({ error: 'URL parameter is required' }, { status: 400 });
     }
