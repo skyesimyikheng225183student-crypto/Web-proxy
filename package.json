@@ -1,7 +1,7 @@
 {
-  "name": "web-proxy",
+  "name": "web proxy test",
   "version": "3.6.2",
-  "description": "Accessible web proxy for bypassing simple web restrictions",
+  "description": "test site lol",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
