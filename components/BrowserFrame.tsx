@@ -29,7 +29,7 @@ const BrowserFrame = ({ url, onLoad, onError }: BrowserFrameProps) => {
       const details = event.data.details ? ` ${JSON.stringify(event.data.details)}` : '';
       setLogs(prev => {
         const next = [...prev, `PROXY ${event.data.type || 'EVENT'}${details}`];
-        return next.length > 250 ? next.slice(next.length - 250) : next;
+        return next.length > 500 ? next.slice(next.length - 500) : next;
       });
     };
 
@@ -77,6 +77,32 @@ const BrowserFrame = ({ url, onLoad, onError }: BrowserFrameProps) => {
     onError('Failed to load the website. It may be blocked or unavailable.');
   };
 
+  const copyLogs = async () => {
+    const text = logs.join('\n');
+    try {
+      await navigator.clipboard.writeText(text);
+      setLogs(prev => [...prev, 'SUCCESS: Debug logs copied to clipboard']);
+    } catch {
+      // Clipboard API may be unavailable in some embedded Safari contexts.
+      try {
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.focus();
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+        setLogs(prev => [...prev, 'SUCCESS: Debug logs copied to clipboard']);
+      } catch {
+        setLogs(prev => [...prev, 'ERROR: Clipboard access was blocked by the browser']);
+      }
+    }
+  };
+
+  const clearLogs = () => setLogs([`Loading ${url}...`]);
+
   return (
     <div className={styles.container}>
       <div className={styles.frameHeader}>
@@ -115,7 +141,15 @@ const BrowserFrame = ({ url, onLoad, onError }: BrowserFrameProps) => {
       />
       {showLogs && logs.length > 0 && (
         <div className={styles.debugLogs} role="log" aria-live="polite">
-          <div className={styles.logsHeader}>Debug Logs</div>
+          <div className={styles.logsHeader}>
+            <span>Debug Logs</span>
+            <button type="button" onClick={copyLogs} aria-label="Copy debug logs">
+              Copy
+            </button>
+            <button type="button" onClick={clearLogs} aria-label="Clear debug logs">
+              Clear
+            </button>
+          </div>
           <div className={styles.logsList}>
             {logs.map((log, idx) => (
               <div key={idx} className={styles.logLine}>
