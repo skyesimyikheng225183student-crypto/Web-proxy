@@ -68,8 +68,8 @@ const rewriteHtml = (html: string, baseUrl: string): string => {
     }
   };
 
-  return html
-    .replace(/(\b(?:src|href|action|poster)\s*=\s*["'])([^"']+)(["'])/gi, (_m, prefix, value, suffix) => `${prefix}${rewrite(value)}${suffix}`)
+  let output = html
+    .replace(/(\b(?:src|href|poster)\s*=\s*["'])([^"']+)(["'])/gi, (_m, prefix, value, suffix) => `${prefix}${rewrite(value)}${suffix}`)
     .replace(/(\bsrcset\s*=\s*["'])([^"']+)(["'])/gi, (_m, prefix, value, suffix) => {
       const rewritten = value.split(',').map((candidate: string) => {
         const parts = candidate.trim().split(/\s+/);
@@ -82,6 +82,15 @@ const rewriteHtml = (html: string, baseUrl: string): string => {
     .replace(/url\(\s*(["']?)([^"')]+)\1\s*\)/gi, (_m, quote, value) => `url(${quote}${rewrite(value)}${quote})`)
     .replace(/<base\b[^>]*>/gi, '')
     .replace(/<meta[^>]+http-equiv\s*=\s*["']content-security-policy["'][^>]*>/gi, '');
+
+  // GET form submissions replace the action's existing query string. Store the
+  // real destination separately and let the runtime bridge add the form data.
+  output = output.replace(/<form\b([^>]*?)\baction\s*=\s*(["'])([^"']+)\2([^>]*)>/gi, (_m, before, quote, value, after) => {
+    const target = new URL(value, baseUrl).toString();
+    return `<form${before}data-web-proxy-action=${quote}${target}${quote}${after}>`;
+  });
+
+  return output;
 };
 
 const createRuntimeBridge = (baseUrl: string): string => {
@@ -113,6 +122,31 @@ const createRuntimeBridge = (baseUrl: string): string => {
     window.addEventListener('unhandledrejection',function(event){
       __debug('UNHANDLED_REJECTION',{reason:String(event.reason||'Unknown rejection')});
     });
+
+    // HTML GET forms replace the query string in their action. Because the
+    // proxy target itself lives in that query string, intercept the submission
+    // and append the form fields to the destination before proxying it.
+    document.addEventListener('submit',function(event){
+      var form=event.target;
+      if(!form || !form.getAttribute) return;
+      var destination=form.getAttribute('data-web-proxy-action');
+      if(!destination) return;
+      var method=(form.getAttribute('method')||'GET').toUpperCase();
+      if(method!=='GET') return;
+      event.preventDefault();
+      try{
+        var target=new URL(destination,__proxyBase);
+        var data=new FormData(form);
+        data.forEach(function(value,key){
+          if(typeof value==='string') target.searchParams.append(key,value);
+        });
+        var proxied=__proxyPrefix+encodeURIComponent(target.toString());
+        __debug('FORM_SUBMIT',{method:'GET',destination:destination,proxy:proxied});
+        window.location.href=proxied;
+      }catch(e){
+        __debug('FORM_SUBMIT_ERROR',{error:String(e)});
+      }
+    },true);
 
     var __fetch=window.fetch;
     window.fetch=function(input,init){
