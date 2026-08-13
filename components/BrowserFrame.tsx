@@ -12,6 +12,8 @@ interface BrowserFrameProps {
 interface ProxyDebugMessage {
   __webProxyDebug?: boolean;
   type?: string;
+  seq?: number;
+  time?: string;
   details?: Record<string, unknown>;
 }
 
@@ -25,11 +27,12 @@ const BrowserFrame = ({ url, onLoad, onError }: BrowserFrameProps) => {
   useEffect(() => {
     const handleProxyDebug = (event: MessageEvent<ProxyDebugMessage>) => {
       if (!event.data || event.data.__webProxyDebug !== true) return;
-
       const details = event.data.details ? ` ${JSON.stringify(event.data.details)}` : '';
+      const stamp = event.data.time ? ` ${event.data.time}` : '';
+      const seq = event.data.seq != null ? ` #${event.data.seq}` : '';
       setLogs(prev => {
-        const next = [...prev, `PROXY ${event.data.type || 'EVENT'}${details}`];
-        return next.length > 500 ? next.slice(next.length - 500) : next;
+        const next = [...prev, `PROXY ${event.data.type || 'EVENT'}${seq}${stamp}${details}`];
+        return next.length > 1000 ? next.slice(next.length - 1000) : next;
       });
     };
 
@@ -55,10 +58,7 @@ const BrowserFrame = ({ url, onLoad, onError }: BrowserFrameProps) => {
     }, 10000);
 
     setLoadTimeout(timeout);
-
-    return () => {
-      clearTimeout(timeout);
-    };
+    return () => clearTimeout(timeout);
   }, [url, onError]);
 
   const handleIframeLoad = () => {
@@ -69,11 +69,7 @@ const BrowserFrame = ({ url, onLoad, onError }: BrowserFrameProps) => {
 
   const handleIframeError = () => {
     if (loadTimeout) clearTimeout(loadTimeout);
-    setLogs(prev => [
-      ...prev,
-      'ERROR: Failed to load the website',
-      'The page may be blocked or unavailable.',
-    ]);
+    setLogs(prev => [...prev, 'ERROR: Failed to load the website', 'The page may be blocked or unavailable.']);
     onError('Failed to load the website. It may be blocked or unavailable.');
   };
 
@@ -83,7 +79,6 @@ const BrowserFrame = ({ url, onLoad, onError }: BrowserFrameProps) => {
       await navigator.clipboard.writeText(text);
       setLogs(prev => [...prev, 'SUCCESS: Debug logs copied to clipboard']);
     } catch {
-      // Clipboard API may be unavailable in some embedded Safari contexts.
       try {
         const textarea = document.createElement('textarea');
         textarea.value = text;
@@ -108,25 +103,10 @@ const BrowserFrame = ({ url, onLoad, onError }: BrowserFrameProps) => {
       <div className={styles.frameHeader}>
         <div className={styles.urlBar}>
           <span className={styles.protocol}>https://</span>
-          <span className={styles.domain} title={url}>
-            {new URL(url).hostname}
-          </span>
+          <span className={styles.domain} title={url}>{new URL(url).hostname}</span>
         </div>
-        <button
-          className={styles.debugToggle}
-          onClick={() => setShowLogs(!showLogs)}
-          aria-label={showLogs ? 'Hide debug logs' : 'Show debug logs'}
-          title={showLogs ? 'Hide logs' : 'Show logs'}
-        >
-          🐛
-        </button>
-        <button
-          className={styles.closeButton}
-          onClick={() => setIframeKey(prev => prev + 1)}
-          aria-label="Reload page"
-        >
-          ×
-        </button>
+        <button className={styles.debugToggle} onClick={() => setShowLogs(!showLogs)} aria-label={showLogs ? 'Hide debug logs' : 'Show debug logs'} title={showLogs ? 'Hide logs' : 'Show logs'}>🐛</button>
+        <button className={styles.closeButton} onClick={() => setIframeKey(prev => prev + 1)} aria-label="Reload page">×</button>
       </div>
       <iframe
         key={iframeKey}
@@ -142,20 +122,12 @@ const BrowserFrame = ({ url, onLoad, onError }: BrowserFrameProps) => {
       {showLogs && logs.length > 0 && (
         <div className={styles.debugLogs} role="log" aria-live="polite">
           <div className={styles.logsHeader}>
-            <span>Debug Logs</span>
-            <button type="button" onClick={copyLogs} aria-label="Copy debug logs">
-              Copy
-            </button>
-            <button type="button" onClick={clearLogs} aria-label="Clear debug logs">
-              Clear
-            </button>
+            <span>Debug Logs ({logs.length})</span>
+            <button type="button" onClick={copyLogs} aria-label="Copy debug logs">Copy</button>
+            <button type="button" onClick={clearLogs} aria-label="Clear debug logs">Clear</button>
           </div>
           <div className={styles.logsList}>
-            {logs.map((log, idx) => (
-              <div key={idx} className={styles.logLine}>
-                {log}
-              </div>
-            ))}
+            {logs.map((log, idx) => <div key={idx} className={styles.logLine}>{log}</div>)}
           </div>
         </div>
       )}
