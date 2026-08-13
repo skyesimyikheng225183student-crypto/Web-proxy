@@ -29,17 +29,6 @@ const getProxiedHeaders = (
     'if-range',
     'if-none-match',
     'if-modified-since',
-    'referer',
-    'origin',
-    'authorization',
-    'x-requested-with',
-    'x-csrf-token',
-    'x-youtube-client-name',
-    'x-youtube-client-version',
-    'x-goog-visitor-id',
-    'x-goog-authuser',
-    'x-goog-pageid',
-    'x-client-data',
   ]) {
     const value = originalHeaders.get(header);
     if (value) headers[header] = value;
@@ -52,10 +41,7 @@ const getProxiedHeaders = (
     }
   }
 
-  // The browser's origin is the proxy, so give the destination a useful
-  // origin/referer instead. Preserve an explicit destination referer when
-  // the proxied page supplied one.
-  headers['referer'] = headers['referer'] || targetOrigin + '/';
+  headers['referer'] = targetOrigin + '/';
   headers['origin'] = targetOrigin;
 
   if (!headers['user-agent']) {
@@ -67,88 +53,45 @@ const getProxiedHeaders = (
 
 const proxyUrl = (url: string): string => `/api/proxy?url=${encodeURIComponent(url)}`;
 
-const isProxyUrl = (value: string): boolean => {
-  try {
-    const parsed = new URL(value, 'https://proxy.invalid');
-    return parsed.pathname === '/api/proxy' && parsed.searchParams.has('url');
-  } catch {
-    return false;
-  }
-};
-
-const rewriteUrl = (value: string, baseUrl: string): string => {
-  const trimmed = value.trim();
-  if (
-    !trimmed ||
-    trimmed.startsWith('#') ||
-    /^(data|blob|javascript|mailto|tel):/i.test(trimmed) ||
-    isProxyUrl(trimmed)
-  ) {
-    return value;
-  }
-
-  try {
-    return proxyUrl(new URL(trimmed, baseUrl).toString());
-  } catch {
-    return value;
-  }
-};
-
 const rewriteHtml = (html: string, baseUrl: string): string => {
-  return html
-    .replace(
-      /(\b(?:src|href|action|poster)\s*=\s*["'])([^"']+)(["'])/gi,
-      (_m, prefix, value, suffix) => `${prefix}${rewriteUrl(value, baseUrl)}${suffix}`,
-    )
-    .replace(
-      /(\bsrcset\s*=\s*["'])([^"']+)(["'])/gi,
-      (_m, prefix, value, suffix) => {
-        const rewritten = value
-          .split(',')
-          .map((candidate: string) => {
-            const parts = candidate.trim().split(/\s+/);
-            if (!parts[0]) return candidate;
-            parts[0] = rewriteUrl(parts[0], baseUrl);
-            return parts.join(' ');
-          })
-          .join(', ');
-        return `${prefix}${rewritten}${suffix}`;
-      },
-    )
-    .replace(
-      /url\(\s*(["']?)([^"')]+)\1\s*\)/gi,
-      (_m, quote, value) => `url(${quote}${rewriteUrl(value, baseUrl)}${quote})`,
-    )
-    .replace(/<base\b[^>]*>/gi, '')
-    .replace(
-      /<meta[^>]+http-equiv\s*=\s*["']content-security-policy["'][^>]*>/gi,
-      '',
-    );
-};
+  const rewrite = (value: string): string => {
+    const trimmed = value.trim();
+    if (!trimmed || trimmed.startsWith('#') || /^(data|blob|javascript|mailto|tel):/i.test(trimmed)) return value;
+    try {
+      return proxyUrl(new URL(trimmed, baseUrl).toString());
+    } catch {
+      return value;
+    }
+  };
 
-const rewriteCss = (css: string, baseUrl: string): string =>
-  css.replace(
-    /url\(\s*(["']?)([^"')]+)\1\s*\)/gi,
-    (_m, quote, value) => `url(${quote}${rewriteUrl(value, baseUrl)}${quote})`,
-  );
+  return html
+    .replace(/(\b(?:src|href|action|poster)\s*=\s*["'])([^"']+)(["'])/gi, (_m, prefix, value, suffix) => `${prefix}${rewrite(value)}${suffix}`)
+    .replace(/(\bsrcset\s*=\s*["'])([^"']+)(["'])/gi, (_m, prefix, value, suffix) => {
+      const rewritten = value.split(',').map((candidate: string) => {
+        const parts = candidate.trim().split(/\s+/);
+        if (!parts[0]) return candidate;
+        parts[0] = rewrite(parts[0]);
+        return parts.join(' ');
+      }).join(', ');
+      return `${prefix}${rewritten}${suffix}`;
+    })
+    .replace(/url\(\s*(["']?)([^"')]+)\1\s*\)/gi, (_m, quote, value) => `url(${quote}${rewrite(value)}${quote})`)
+    .replace(/<base\b[^>]*>/gi, '')
+    .replace(/<meta[^>]+http-equiv\s*=\s*["']content-security-policy["'][^>]*>/gi, '');
+};
 
 const createRuntimeBridge = (baseUrl: string): string => {
   const serializedBase = JSON.stringify(baseUrl);
   return `<script>(function(){
     var __proxyBase=${serializedBase};
-    var __proxyOrigin=location.origin;
     var __proxyPrefix='/api/proxy?url=';
-
     function __proxyTarget(input){
       var raw=typeof input==='string'?input:(input&&input.url);
       if(!raw) return null;
       try{
-        var candidate=new URL(raw,__proxyBase);
-        if(candidate.pathname==='/api/proxy' && candidate.searchParams.has('url')) return null;
-        if(candidate.origin===__proxyOrigin){
-          candidate=new URL(candidate.pathname+candidate.search+candidate.hash,__proxyBase);
-        }
-        return __proxyPrefix+encodeURIComponent(candidate.toString());
+        var resolved=new URL(raw,__proxyBase);
+        if(resolved.pathname==='/api/proxy' && resolved.searchParams.has('url')) return null;
+        return __proxyPrefix+encodeURIComponent(resolved.toString());
       }catch(e){return null;}
     }
 
@@ -175,12 +118,6 @@ const createRuntimeBridge = (baseUrl: string): string => {
         return __beacon(target||url,data);
       };
     }
-
-    var __windowOpen=window.open;
-    window.open=function(url,target,features){
-      var proxied=__proxyTarget(url);
-      return __windowOpen.call(this,proxied||url,target,features);
-    };
   })();</script>`;
 };
 
@@ -203,38 +140,34 @@ const validateTarget = (targetUrl: string): URL | NextResponse => {
   return parsedUrl;
 };
 
-const getTargetUrl = (requestUrl: string): string | null => {
-  const incoming = new URL(requestUrl);
-  const encodedTarget = incoming.searchParams.get('url');
-  if (!encodedTarget) return null;
+const getTargetUrl = (request: NextRequest): string | NextResponse => {
+  const requestUrl = new URL(request.url);
+  const targetUrl = requestUrl.searchParams.get('url');
 
-  let target: URL;
+  if (!targetUrl) {
+    return NextResponse.json({ error: 'URL parameter is required' }, { status: 400 });
+  }
+
+  // A GET form submission appends its fields to the rewritten proxy action.
+  // Move those fields into the destination URL instead of treating them as
+  // parameters belonging to the proxy itself.
   try {
-    target = new URL(encodedTarget);
+    const destination = new URL(targetUrl);
+    for (const [key, value] of requestUrl.searchParams) {
+      if (key !== 'url') destination.searchParams.append(key, value);
+    }
+    return destination.toString();
   } catch {
-    return null;
+    return targetUrl;
   }
-
-  // Preserve query parameters added by a form submission or client-side
-  // navigation. This is important for searches such as ?q=test.
-  for (const [key, value] of incoming.searchParams.entries()) {
-    if (key !== 'url') target.searchParams.append(key, value);
-  }
-
-  return target.toString();
 };
 
-const proxyRequest = async (
-  request: NextRequest,
-  method: 'GET' | 'POST' | 'HEAD',
-) => {
+const proxyRequest = async (request: NextRequest, method: 'GET' | 'POST' | 'HEAD') => {
   try {
-    const targetUrl = getTargetUrl(request.url);
-    if (!targetUrl) {
-      return NextResponse.json({ error: 'URL parameter is required' }, { status: 400 });
-    }
+    const target = getTargetUrl(request);
+    if (target instanceof NextResponse) return target;
 
-    const validated = validateTarget(targetUrl);
+    const validated = validateTarget(target);
     if (validated instanceof NextResponse) return validated;
     const parsedUrl = validated;
 
@@ -244,7 +177,7 @@ const proxyRequest = async (
 
       response = await axios.request({
         method,
-        url: targetUrl,
+        url: target,
         headers: getProxiedHeaders(request.headers, parsedUrl.origin, method === 'POST'),
         data: body,
         timeout: 20000,
@@ -258,18 +191,14 @@ const proxyRequest = async (
     }
 
     const rawContentType = response.headers['content-type'];
-    const contentType = typeof rawContentType === 'string'
-      ? rawContentType
-      : 'application/octet-stream';
-    const lowerContentType = contentType.toLowerCase();
-    const isHtml = lowerContentType.includes('text/html');
-    const isCss = lowerContentType.includes('text/css');
-    const finalUrl = response.request?.res?.responseUrl || targetUrl;
+    const contentType = typeof rawContentType === 'string' ? rawContentType : 'application/octet-stream';
+    const isHtml = contentType.toLowerCase().includes('text/html');
+    const finalUrl = response.request?.res?.responseUrl || target;
 
     const responseHeaders: Record<string, string> = {
       'access-control-allow-origin': '*',
       'access-control-allow-methods': 'GET, POST, HEAD, OPTIONS',
-      'access-control-allow-headers': 'Content-Type, Authorization, Range, X-Requested-With, X-Youtube-Client-Name, X-Youtube-Client-Version',
+      'access-control-allow-headers': 'Content-Type, Authorization, Range, X-Requested-With',
       'access-control-expose-headers': 'Content-Length, Content-Range, Accept-Ranges, Content-Type, ETag',
       'x-content-type-options': 'nosniff',
       'cache-control': isHtml ? 'no-cache, no-store, must-revalidate' : 'public, max-age=3600',
@@ -282,32 +211,16 @@ const proxyRequest = async (
     }
 
     if (isHtml) {
+      responseHeaders['content-type'] = 'text/html; charset=utf-8';
       delete responseHeaders['content-length'];
       delete responseHeaders['content-range'];
       delete responseHeaders['accept-ranges'];
 
-      responseHeaders['content-type'] = 'text/html; charset=utf-8';
       const body = Buffer.from(response.data).toString('utf8');
       const rewritten = rewriteHtml(body, finalUrl);
-      const bridged = rewritten.replace(
-        /<head\b[^>]*>/i,
-        match => `${match}${createRuntimeBridge(finalUrl)}`,
-      );
+      const bridged = rewritten.replace(/<head\b[^>]*>/i, match => `${match}${createRuntimeBridge(finalUrl)}`);
 
       return new NextResponse(bridged, {
-        status: response.status,
-        headers: responseHeaders,
-      });
-    }
-
-    if (isCss) {
-      delete responseHeaders['content-length'];
-      delete responseHeaders['content-range'];
-      delete responseHeaders['accept-ranges'];
-      responseHeaders['content-type'] = 'text/css; charset=utf-8';
-
-      const css = Buffer.from(response.data).toString('utf8');
-      return new NextResponse(rewriteCss(css, finalUrl), {
         status: response.status,
         headers: responseHeaders,
       });
@@ -341,7 +254,7 @@ export async function OPTIONS() {
     headers: {
       'access-control-allow-origin': '*',
       'access-control-allow-methods': 'GET, POST, HEAD, OPTIONS',
-      'access-control-allow-headers': 'Content-Type, Authorization, Range, X-Requested-With, X-Youtube-Client-Name, X-Youtube-Client-Version',
+      'access-control-allow-headers': 'Content-Type, Authorization, Range, X-Requested-With',
       'access-control-max-age': '86400',
     },
   });
