@@ -25,37 +25,43 @@ export default function Home() {
   return (
     <div className={styles.container}>
       <header className={styles.header} role="banner">
-        <h1>Web Proxy test</h1>
-        <p>currently testin, dont expect much.</p>
+        <div>
+          <h1>Web Proxy test</h1>
+          <p>currently testin, dont expect much.</p>
+        </div>
+        <a
+          href="/dev"
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '0.65rem 1rem',
+            borderRadius: '0.6rem',
+            textDecoration: 'none',
+            fontWeight: 600,
+            border: '1px solid currentColor',
+          }}
+        >
+          Developer Panel
+        </a>
       </header>
 
       <main className={styles.main} role="main">
         <ProxyForm onRequest={handleProxyRequest} />
 
         {error && (
-          <div
-            className={styles.error}
-            role="alert"
-            aria-live="polite"
-            aria-atomic="true"
-          >
+          <div className={styles.error} role="alert" aria-live="polite" aria-atomic="true">
             <strong>Error:</strong> {error}
           </div>
         )}
 
         {url && (
-          <BrowserFrame
-            url={url}
-            onLoad={handleLoad}
-            onError={handleError}
-          />
+          <BrowserFrame url={url} onLoad={handleLoad} onError={handleError} />
         )}
       </main>
 
       <footer className={styles.footer} role="contentinfo">
-        <p>
-         made for apple, may not work elsewhere, idk tbh.
-        </p>
+        <p>made for apple, may not work elsewhere, idk tbh.</p>
       </footer>
     </div>
   );
