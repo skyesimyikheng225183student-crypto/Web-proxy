@@ -165,7 +165,7 @@ const proxyRequest = async (request: NextRequest, method: 'GET'|'POST'|'HEAD') =
         method,url:target,
         headers:getProxiedHeaders(request.headers,parsedUrl.origin,method==='POST'),
         data:body,timeout:20000,maxRedirects:10,responseType:'arraybuffer',validateStatus:()=>true,
-        decompress:false,
+        decompress:true,
       });
     } catch (fetchError) {
       debugLog('FETCH_FAILURE',{method,target,error:String(fetchError)}); console.error('Fetch error:',fetchError);
@@ -176,29 +176,37 @@ const proxyRequest = async (request: NextRequest, method: 'GET'|'POST'|'HEAD') =
     const contentType=typeof rawContentType==='string'?rawContentType:'application/octet-stream';
     const isHtml=contentType.toLowerCase().includes('text/html');
     const contentEncoding=typeof response.headers['content-encoding']==='string'?response.headers['content-encoding']:null;
+    const upstreamContentLength=typeof response.headers['content-length']==='string'?response.headers['content-length']:null;
     const finalUrl=response.request?.res?.responseUrl||target;
     const responseBytes=Buffer.isBuffer(response.data)?response.data.length:null;
-    debugLog('RESPONSE',{method,target,finalUrl,status:response.status,contentType,contentEncoding,bytes:responseBytes,redirected:finalUrl!==target,contentLength:response.headers['content-length']||null,contentRange:response.headers['content-range']||null});
+    debugLog('RESPONSE',{method,target,finalUrl,status:response.status,contentType,contentEncoding,bytes:responseBytes,redirected:finalUrl!==target,upstreamContentLength,contentRange:response.headers['content-range']||null});
 
     const responseHeaders: Record<string,string>={
       'access-control-allow-origin':'*','access-control-allow-methods':'GET, POST, HEAD, OPTIONS','access-control-allow-headers':'Content-Type, Authorization, Range, X-Requested-With','access-control-expose-headers':'Content-Length, Content-Range, Accept-Ranges, Content-Type, ETag','x-content-type-options':'nosniff','cache-control':isHtml?'no-cache, no-store, must-revalidate':'public, max-age=3600','content-type':contentType,
     };
-    for(const header of ['content-length','content-range','accept-ranges','etag','last-modified','content-encoding']){
+    for(const header of ['etag','last-modified']){
       const value=response.headers[header]; if(typeof value==='string') responseHeaders[header]=value;
     }
 
     if(isHtml){
       responseHeaders['content-type']='text/html; charset=utf-8';
-      delete responseHeaders['content-length'];delete responseHeaders['content-range'];delete responseHeaders['accept-ranges'];
       const body=Buffer.from(response.data).toString('utf8');
       const rewritten=rewriteHtml(body,finalUrl);
       const bridged=rewritten.replace(/<head\b[^>]*>/i,match=>`${match}${createRuntimeBridge(finalUrl)}`);
-      delete responseHeaders['content-encoding'];
       return new NextResponse(bridged,{status:response.status,headers:responseHeaders});
     }
 
-    // With decompress:false, the body and Content-Encoding remain paired.
-    // Do not alter Content-Length/Content-Encoding for opaque resources.
+    // Axios decompresses upstream gzip/br/deflate responses before they reach Next.js.
+    // Therefore the upstream Content-Encoding and Content-Length must NOT be forwarded:
+    // they describe the compressed body, while the body we return is decompressed.
+    // Let Next.js/Vercel generate the correct length for the bytes actually returned.
+    if (response.status === 206) {
+      // A decompressed range response no longer has a trustworthy upstream Content-Range.
+      // Keep the body usable rather than advertising compressed byte offsets.
+      delete responseHeaders['content-range'];
+      delete responseHeaders['accept-ranges'];
+    }
+
     return new NextResponse(method==='HEAD'?null:new Uint8Array(response.data),{status:response.status,headers:responseHeaders});
   } catch(error){
     debugLog('INTERNAL_ERROR',{method,error:String(error)});console.error('Proxy error:',error);
