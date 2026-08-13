@@ -25,23 +25,11 @@ export default function Home() {
   return (
     <div className={styles.container}>
       <header className={styles.header} role="banner">
-        <div>
+        <div className={styles.headerTitle}>
           <h1>Web Proxy test</h1>
           <p>currently testin, dont expect much.</p>
         </div>
-        <a
-          href="/dev"
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: '0.65rem 1rem',
-            borderRadius: '0.6rem',
-            textDecoration: 'none',
-            fontWeight: 600,
-            border: '1px solid currentColor',
-          }}
-        >
+        <a className={styles.devButton} href="/dev">
           Developer Panel
         </a>
       </header>
