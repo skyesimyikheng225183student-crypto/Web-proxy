@@ -1,1 +1,1 @@
-made with ai lol, too lazy to code it manually so uh... sorry.
+don’t expect much, it’s in dev.
