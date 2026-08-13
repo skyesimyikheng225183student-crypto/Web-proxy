@@ -29,6 +29,17 @@ const getProxiedHeaders = (
     'if-range',
     'if-none-match',
     'if-modified-since',
+    'referer',
+    'origin',
+    'authorization',
+    'x-requested-with',
+    'x-csrf-token',
+    'x-youtube-client-name',
+    'x-youtube-client-version',
+    'x-goog-visitor-id',
+    'x-goog-authuser',
+    'x-goog-pageid',
+    'x-client-data',
   ]) {
     const value = originalHeaders.get(header);
     if (value) headers[header] = value;
@@ -41,7 +52,10 @@ const getProxiedHeaders = (
     }
   }
 
-  headers['referer'] = targetOrigin + '/';
+  // The browser's origin is the proxy, so give the destination a useful
+  // origin/referer instead. Preserve an explicit destination referer when
+  // the proxied page supplied one.
+  headers['referer'] = headers['referer'] || targetOrigin + '/';
   headers['origin'] = targetOrigin;
 
   if (!headers['user-agent']) {
@@ -53,12 +67,22 @@ const getProxiedHeaders = (
 
 const proxyUrl = (url: string): string => `/api/proxy?url=${encodeURIComponent(url)}`;
 
+const isProxyUrl = (value: string): boolean => {
+  try {
+    const parsed = new URL(value, 'https://proxy.invalid');
+    return parsed.pathname === '/api/proxy' && parsed.searchParams.has('url');
+  } catch {
+    return false;
+  }
+};
+
 const rewriteUrl = (value: string, baseUrl: string): string => {
   const trimmed = value.trim();
   if (
     !trimmed ||
     trimmed.startsWith('#') ||
-    /^(data|blob|javascript|mailto|tel):/i.test(trimmed)
+    /^(data|blob|javascript|mailto|tel):/i.test(trimmed) ||
+    isProxyUrl(trimmed)
   ) {
     return value;
   }
@@ -119,12 +143,12 @@ const createRuntimeBridge = (baseUrl: string): string => {
       var raw=typeof input==='string'?input:(input&&input.url);
       if(!raw) return null;
       try{
-        var resolved=new URL(raw,__proxyBase);
-        if(resolved.origin===__proxyOrigin && resolved.pathname!=='/api/proxy'){
-          resolved=new URL(resolved.pathname+resolved.search+resolved.hash,__proxyBase);
+        var candidate=new URL(raw,__proxyBase);
+        if(candidate.pathname==='/api/proxy' && candidate.searchParams.has('url')) return null;
+        if(candidate.origin===__proxyOrigin){
+          candidate=new URL(candidate.pathname+candidate.search+candidate.hash,__proxyBase);
         }
-        if(resolved.pathname==='/api/proxy' && resolved.searchParams.has('url')) return null;
-        return __proxyPrefix+encodeURIComponent(resolved.toString());
+        return __proxyPrefix+encodeURIComponent(candidate.toString());
       }catch(e){return null;}
     }
 
@@ -157,18 +181,6 @@ const createRuntimeBridge = (baseUrl: string): string => {
       var proxied=__proxyTarget(url);
       return __windowOpen.call(this,proxied||url,target,features);
     };
-
-    var __setAttribute=Element.prototype.setAttribute;
-    Element.prototype.setAttribute=function(name,value){
-      if(/^(src|href|action|poster)$/i.test(name)){
-        var tag=this.tagName;
-        if(tag==='SCRIPT'||tag==='IMG'||tag==='IFRAME'||tag==='VIDEO'||tag==='AUDIO'||tag==='SOURCE'||tag==='LINK'||tag==='FORM'||tag==='OBJECT'){
-          var target=__proxyTarget(value);
-          if(target) value=target;
-        }
-      }
-      return __setAttribute.call(this,name,value);
-    };
   })();</script>`;
 };
 
@@ -193,16 +205,21 @@ const validateTarget = (targetUrl: string): URL | NextResponse => {
 
 const getTargetUrl = (requestUrl: string): string | null => {
   const incoming = new URL(requestUrl);
-  const targetUrl = incoming.searchParams.get('url');
-  if (!targetUrl) return null;
+  const encodedTarget = incoming.searchParams.get('url');
+  if (!encodedTarget) return null;
 
-  // A rewritten form/link can look like:
-  // /api/proxy?url=https%3A%2F%2Fwww.google.com%2Fsearch&q=test
-  // Preserve the extra query parameters when forwarding to the destination.
-  const target = new URL(targetUrl);
-  incoming.searchParams.forEach((value, key) => {
+  let target: URL;
+  try {
+    target = new URL(encodedTarget);
+  } catch {
+    return null;
+  }
+
+  // Preserve query parameters added by a form submission or client-side
+  // navigation. This is important for searches such as ?q=test.
+  for (const [key, value] of incoming.searchParams.entries()) {
     if (key !== 'url') target.searchParams.append(key, value);
-  });
+  }
 
   return target.toString();
 };
@@ -252,7 +269,7 @@ const proxyRequest = async (
     const responseHeaders: Record<string, string> = {
       'access-control-allow-origin': '*',
       'access-control-allow-methods': 'GET, POST, HEAD, OPTIONS',
-      'access-control-allow-headers': 'Content-Type, Authorization, Range, X-Requested-With',
+      'access-control-allow-headers': 'Content-Type, Authorization, Range, X-Requested-With, X-Youtube-Client-Name, X-Youtube-Client-Version',
       'access-control-expose-headers': 'Content-Length, Content-Range, Accept-Ranges, Content-Type, ETag',
       'x-content-type-options': 'nosniff',
       'cache-control': isHtml ? 'no-cache, no-store, must-revalidate' : 'public, max-age=3600',
@@ -324,7 +341,7 @@ export async function OPTIONS() {
     headers: {
       'access-control-allow-origin': '*',
       'access-control-allow-methods': 'GET, POST, HEAD, OPTIONS',
-      'access-control-allow-headers': 'Content-Type, Authorization, Range, X-Requested-With',
+      'access-control-allow-headers': 'Content-Type, Authorization, Range, X-Requested-With, X-Youtube-Client-Name, X-Youtube-Client-Version',
       'access-control-max-age': '86400',
     },
   });
