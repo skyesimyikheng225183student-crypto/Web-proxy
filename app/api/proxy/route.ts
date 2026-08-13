@@ -13,6 +13,10 @@ const BLOCKED_PATTERNS = [
 const isBlockedDomain = (hostname: string): boolean =>
   BLOCKED_PATTERNS.some(pattern => pattern.test(hostname));
 
+const debugLog = (event: string, details: Record<string, unknown>) => {
+  console.log(`[WebProxy:${event}]`, JSON.stringify(details));
+};
+
 const getProxiedHeaders = (
   originalHeaders: Headers,
   targetOrigin: string,
@@ -85,37 +89,68 @@ const createRuntimeBridge = (baseUrl: string): string => {
   return `<script>(function(){
     var __proxyBase=${serializedBase};
     var __proxyPrefix='/api/proxy?url=';
+    function __debug(type,details){
+      try{window.parent.postMessage({__webProxyDebug:true,type:type,details:details},'*');}catch(e){}
+    }
     function __proxyTarget(input){
       var raw=typeof input==='string'?input:(input&&input.url);
-      if(!raw) return null;
+      if(!raw){__debug('REQUEST_SKIPPED',{reason:'No URL',inputType:typeof input});return null;}
       try{
         var resolved=new URL(raw,__proxyBase);
         if(resolved.pathname==='/api/proxy' && resolved.searchParams.has('url')) return null;
-        return __proxyPrefix+encodeURIComponent(resolved.toString());
-      }catch(e){return null;}
+        var target=__proxyPrefix+encodeURIComponent(resolved.toString());
+        __debug('REQUEST_REWRITE',{original:raw,resolved:resolved.toString(),proxy:target});
+        return target;
+      }catch(e){
+        __debug('REQUEST_REWRITE_ERROR',{original:String(raw),error:String(e)});
+        return null;
+      }
     }
+
+    window.addEventListener('error',function(event){
+      __debug('JS_ERROR',{message:event.message||'Unknown error',source:event.filename||'',line:event.lineno||0,column:event.colno||0});
+    });
+    window.addEventListener('unhandledrejection',function(event){
+      __debug('UNHANDLED_REJECTION',{reason:String(event.reason||'Unknown rejection')});
+    });
 
     var __fetch=window.fetch;
     window.fetch=function(input,init){
       var target=__proxyTarget(input);
       if(!target) return __fetch.call(this,input,init);
-      if(typeof input==='object' && input instanceof Request){
-        return __fetch.call(this,new Request(target,input));
-      }
-      return __fetch.call(this,target,init);
+      __debug('FETCH_START',{proxy:target,method:(init&&init.method)||'GET'});
+      return __fetch.call(this,typeof input==='object' && input instanceof Request?new Request(target,input):target,init).then(function(response){
+        __debug('FETCH_RESPONSE',{status:response.status,ok:response.ok,url:response.url});
+        return response;
+      }).catch(function(error){
+        __debug('FETCH_ERROR',{error:String(error),proxy:target});
+        throw error;
+      });
     };
 
     var __open=XMLHttpRequest.prototype.open;
+    var __send=XMLHttpRequest.prototype.send;
     XMLHttpRequest.prototype.open=function(method,url,async,user,password){
       var target=__proxyTarget(url);
+      this.__webProxyDebugUrl=target||url;
+      __debug('XHR_OPEN',{method:method,url:String(url),proxy:target||String(url)});
       return __open.call(this,method,target||url,async,user,password);
+    };
+    XMLHttpRequest.prototype.send=function(body){
+      var xhr=this;
+      xhr.addEventListener('load',function(){__debug('XHR_RESPONSE',{status:xhr.status,url:xhr.responseURL||xhr.__webProxyDebugUrl});});
+      xhr.addEventListener('error',function(){__debug('XHR_ERROR',{status:xhr.status,url:xhr.__webProxyDebugUrl||''});});
+      xhr.addEventListener('abort',function(){__debug('XHR_ABORT',{url:xhr.__webProxyDebugUrl||''});});
+      return __send.call(this,body);
     };
 
     if(navigator.sendBeacon){
       var __beacon=navigator.sendBeacon.bind(navigator);
       navigator.sendBeacon=function(url,data){
         var target=__proxyTarget(url);
-        return __beacon(target||url,data);
+        var result=__beacon(target||url,data);
+        __debug('BEACON',{url:String(url),proxy:target||String(url),accepted:result});
+        return result;
       };
     }
   })();</script>`;
@@ -145,12 +180,18 @@ const getTargetUrl = (request: NextRequest): string | NextResponse => {
   const targetUrl = requestUrl.searchParams.get('url');
 
   if (!targetUrl) {
+    debugLog('MISSING_URL', {
+      method: request.method,
+      requestUrl: request.url,
+      referer: request.headers.get('referer') || null,
+      userAgent: request.headers.get('user-agent') || null,
+      accept: request.headers.get('accept') || null,
+      secFetchSite: request.headers.get('sec-fetch-site') || null,
+      secFetchDest: request.headers.get('sec-fetch-dest') || null,
+    });
     return NextResponse.json({ error: 'URL parameter is required' }, { status: 400 });
   }
 
-  // A GET form submission appends its fields to the rewritten proxy action.
-  // Move those fields into the destination URL instead of treating them as
-  // parameters belonging to the proxy itself.
   try {
     const destination = new URL(targetUrl);
     for (const [key, value] of requestUrl.searchParams) {
@@ -171,6 +212,16 @@ const proxyRequest = async (request: NextRequest, method: 'GET' | 'POST' | 'HEAD
     if (validated instanceof NextResponse) return validated;
     const parsedUrl = validated;
 
+    debugLog('REQUEST', {
+      method,
+      target,
+      hostname: parsedUrl.hostname,
+      pathname: parsedUrl.pathname,
+      hasQuery: parsedUrl.search.length > 0,
+      range: request.headers.get('range') || null,
+      contentType: request.headers.get('content-type') || null,
+    });
+
     let response;
     try {
       const body = method === 'POST' ? Buffer.from(await request.arrayBuffer()) : undefined;
@@ -186,6 +237,7 @@ const proxyRequest = async (request: NextRequest, method: 'GET' | 'POST' | 'HEAD
         validateStatus: () => true,
       });
     } catch (fetchError) {
+      debugLog('FETCH_FAILURE', { method, target, error: String(fetchError) });
       console.error('Fetch error:', fetchError);
       return NextResponse.json({ error: 'Failed to reach website' }, { status: 503 });
     }
@@ -194,6 +246,18 @@ const proxyRequest = async (request: NextRequest, method: 'GET' | 'POST' | 'HEAD
     const contentType = typeof rawContentType === 'string' ? rawContentType : 'application/octet-stream';
     const isHtml = contentType.toLowerCase().includes('text/html');
     const finalUrl = response.request?.res?.responseUrl || target;
+
+    debugLog('RESPONSE', {
+      method,
+      target,
+      finalUrl,
+      status: response.status,
+      contentType,
+      bytes: Buffer.isBuffer(response.data) ? response.data.length : null,
+      redirected: finalUrl !== target,
+      contentLength: response.headers['content-length'] || null,
+      contentRange: response.headers['content-range'] || null,
+    });
 
     const responseHeaders: Record<string, string> = {
       'access-control-allow-origin': '*',
@@ -231,6 +295,7 @@ const proxyRequest = async (request: NextRequest, method: 'GET' | 'POST' | 'HEAD
       headers: responseHeaders,
     });
   } catch (error) {
+    debugLog('INTERNAL_ERROR', { method, error: String(error) });
     console.error('Proxy error:', error);
     return NextResponse.json({ error: 'Internal proxy error' }, { status: 500 });
   }
