@@ -54,7 +54,7 @@ export default function Home() {
 
       <footer className={styles.footer} role="contentinfo">
         <p>
-          Made with accessibility in mind. Compatible with iOS Safari and screen readers.
+         made for apple, may not work elsewhere, idk tbh.
         </p>
       </footer>
     </div>
