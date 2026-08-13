@@ -7,12 +7,17 @@
 }
 
 .header {
+  position: relative;
   background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
   color: var(--text-color);
   padding: 1.5rem;
   text-align: center;
   border-bottom: 1px solid var(--border-color);
   safe-area-inset-top: env(safe-area-inset-top);
+}
+
+.headerTitle {
+  padding: 0 9rem;
 }
 
 .header h1 {
@@ -24,6 +29,33 @@
 .header p {
   font-size: 0.875rem;
   opacity: 0.8;
+}
+
+.devButton {
+  position: absolute;
+  top: 50%;
+  right: 1.5rem;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 42px;
+  padding: 0.65rem 1rem;
+  border: 1px solid currentColor;
+  border-radius: 0.6rem;
+  color: inherit;
+  background: rgba(255, 255, 255, 0.12);
+  text-decoration: none;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.devButton:hover {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.devButton:active {
+  transform: translateY(-50%) scale(0.98);
 }
 
 .main {
@@ -81,6 +113,20 @@
 @media (max-width: 640px) {
   .header {
     padding: 1rem;
+  }
+
+  .headerTitle {
+    padding: 0;
+  }
+
+  .devButton {
+    position: static;
+    transform: none;
+    margin: 1rem auto 0;
+  }
+
+  .devButton:active {
+    transform: scale(0.98);
   }
 
   .main {
