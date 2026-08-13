@@ -39,10 +39,8 @@ const getProxiedHeaders = (
   }
 
   if (includeContentHeaders) {
-    for (const header of ['content-type', 'content-length']) {
-      const value = originalHeaders.get(header);
-      if (value) headers[header] = value;
-    }
+    const value = originalHeaders.get('content-type');
+    if (value) headers['content-type'] = value;
   }
 
   headers['referer'] = targetOrigin + '/';
@@ -83,8 +81,6 @@ const rewriteHtml = (html: string, baseUrl: string): string => {
     .replace(/<base\b[^>]*>/gi, '')
     .replace(/<meta[^>]+http-equiv\s*=\s*["']content-security-policy["'][^>]*>/gi, '');
 
-  // GET form submissions replace the action's existing query string. Store the
-  // real destination separately and let the runtime bridge add the form data.
   output = output.replace(/<form\b([^>]*?)\baction\s*=\s*(["'])([^"']+)\2([^>]*)>/gi, (_m, before, quote, value, after) => {
     const target = new URL(value, baseUrl).toString();
     return `<form${before}data-web-proxy-action=${quote}${target}${quote}${after}>`;
@@ -98,263 +94,119 @@ const createRuntimeBridge = (baseUrl: string): string => {
   return `<script>(function(){
     var __proxyBase=${serializedBase};
     var __proxyPrefix='/api/proxy?url=';
-    function __debug(type,details){
-      try{window.parent.postMessage({__webProxyDebug:true,type:type,details:details},'*');}catch(e){}
-    }
+    function __debug(type,details){try{window.parent.postMessage({__webProxyDebug:true,type:type,details:details},'*');}catch(e){}}
     function __proxyTarget(input){
       var raw=typeof input==='string'?input:(input&&input.url);
       if(!raw){__debug('REQUEST_SKIPPED',{reason:'No URL',inputType:typeof input});return null;}
       try{
         var resolved=new URL(raw,__proxyBase);
-        if(resolved.pathname==='/api/proxy' && resolved.searchParams.has('url')) return null;
+        if(resolved.pathname==='/api/proxy'&&resolved.searchParams.has('url'))return null;
         var target=__proxyPrefix+encodeURIComponent(resolved.toString());
         __debug('REQUEST_REWRITE',{original:raw,resolved:resolved.toString(),proxy:target});
         return target;
-      }catch(e){
-        __debug('REQUEST_REWRITE_ERROR',{original:String(raw),error:String(e)});
-        return null;
-      }
+      }catch(e){__debug('REQUEST_REWRITE_ERROR',{original:String(raw),error:String(e)});return null;}
     }
-
-    window.addEventListener('error',function(event){
-      __debug('JS_ERROR',{message:event.message||'Unknown error',source:event.filename||'',line:event.lineno||0,column:event.colno||0});
-    });
-    window.addEventListener('unhandledrejection',function(event){
-      __debug('UNHANDLED_REJECTION',{reason:String(event.reason||'Unknown rejection')});
-    });
-
-    // HTML GET forms replace the query string in their action. Because the
-    // proxy target itself lives in that query string, intercept the submission
-    // and append the form fields to the destination before proxying it.
+    window.addEventListener('error',function(event){__debug('JS_ERROR',{message:event.message||'Unknown error',source:event.filename||'',line:event.lineno||0,column:event.colno||0});});
+    window.addEventListener('unhandledrejection',function(event){__debug('UNHANDLED_REJECTION',{reason:String(event.reason||'Unknown rejection')});});
     document.addEventListener('submit',function(event){
-      var form=event.target;
-      if(!form || !form.getAttribute) return;
-      var destination=form.getAttribute('data-web-proxy-action');
-      if(!destination) return;
-      var method=(form.getAttribute('method')||'GET').toUpperCase();
-      if(method!=='GET') return;
+      var form=event.target;if(!form||!form.getAttribute)return;
+      var destination=form.getAttribute('data-web-proxy-action');if(!destination)return;
+      var method=(form.getAttribute('method')||'GET').toUpperCase();if(method!=='GET')return;
       event.preventDefault();
       try{
-        var target=new URL(destination,__proxyBase);
-        var data=new FormData(form);
-        data.forEach(function(value,key){
-          if(typeof value==='string') target.searchParams.append(key,value);
-        });
+        var target=new URL(destination,__proxyBase),data=new FormData(form);
+        data.forEach(function(value,key){if(typeof value==='string')target.searchParams.append(key,value);});
         var proxied=__proxyPrefix+encodeURIComponent(target.toString());
-        __debug('FORM_SUBMIT',{method:'GET',destination:destination,proxy:proxied});
-        window.location.href=proxied;
-      }catch(e){
-        __debug('FORM_SUBMIT_ERROR',{error:String(e)});
-      }
+        __debug('FORM_SUBMIT',{method:'GET',destination:destination,proxy:proxied});window.location.href=proxied;
+      }catch(e){__debug('FORM_SUBMIT_ERROR',{error:String(e)});}
     },true);
-
     var __fetch=window.fetch;
-    window.fetch=function(input,init){
-      var target=__proxyTarget(input);
-      if(!target) return __fetch.call(this,input,init);
-      __debug('FETCH_START',{proxy:target,method:(init&&init.method)||'GET'});
-      return __fetch.call(this,typeof input==='object' && input instanceof Request?new Request(target,input):target,init).then(function(response){
-        __debug('FETCH_RESPONSE',{status:response.status,ok:response.ok,url:response.url});
-        return response;
-      }).catch(function(error){
-        __debug('FETCH_ERROR',{error:String(error),proxy:target});
-        throw error;
-      });
-    };
-
-    var __open=XMLHttpRequest.prototype.open;
-    var __send=XMLHttpRequest.prototype.send;
-    XMLHttpRequest.prototype.open=function(method,url,async,user,password){
-      var target=__proxyTarget(url);
-      this.__webProxyDebugUrl=target||url;
-      __debug('XHR_OPEN',{method:method,url:String(url),proxy:target||String(url)});
-      return __open.call(this,method,target||url,async,user,password);
-    };
-    XMLHttpRequest.prototype.send=function(body){
-      var xhr=this;
-      xhr.addEventListener('load',function(){__debug('XHR_RESPONSE',{status:xhr.status,url:xhr.responseURL||xhr.__webProxyDebugUrl});});
-      xhr.addEventListener('error',function(){__debug('XHR_ERROR',{status:xhr.status,url:xhr.__webProxyDebugUrl||''});});
-      xhr.addEventListener('abort',function(){__debug('XHR_ABORT',{url:xhr.__webProxyDebugUrl||''});});
-      return __send.call(this,body);
-    };
-
-    if(navigator.sendBeacon){
-      var __beacon=navigator.sendBeacon.bind(navigator);
-      navigator.sendBeacon=function(url,data){
-        var target=__proxyTarget(url);
-        var result=__beacon(target||url,data);
-        __debug('BEACON',{url:String(url),proxy:target||String(url),accepted:result});
-        return result;
-      };
-    }
+    window.fetch=function(input,init){var target=__proxyTarget(input);if(!target)return __fetch.call(this,input,init);__debug('FETCH_START',{proxy:target,method:(init&&init.method)||'GET'});return __fetch.call(this,typeof input==='object'&&input instanceof Request?new Request(target,input):target,init).then(function(response){__debug('FETCH_RESPONSE',{status:response.status,ok:response.ok,url:response.url});return response;}).catch(function(error){__debug('FETCH_ERROR',{error:String(error),proxy:target});throw error;});};
+    var __open=XMLHttpRequest.prototype.open,__send=XMLHttpRequest.prototype.send;
+    XMLHttpRequest.prototype.open=function(method,url,async,user,password){var target=__proxyTarget(url);this.__webProxyDebugUrl=target||url;__debug('XHR_OPEN',{method:method,url:String(url),proxy:target||String(url)});return __open.call(this,method,target||url,async,user,password);};
+    XMLHttpRequest.prototype.send=function(body){var xhr=this;xhr.addEventListener('load',function(){__debug('XHR_RESPONSE',{status:xhr.status,url:xhr.responseURL||xhr.__webProxyDebugUrl});});xhr.addEventListener('error',function(){__debug('XHR_ERROR',{status:xhr.status,url:xhr.__webProxyDebugUrl||''});});xhr.addEventListener('abort',function(){__debug('XHR_ABORT',{url:xhr.__webProxyDebugUrl||''});});return __send.call(this,body);};
+    if(navigator.sendBeacon){var __beacon=navigator.sendBeacon.bind(navigator);navigator.sendBeacon=function(url,data){var target=__proxyTarget(url),result=__beacon(target||url,data);__debug('BEACON',{url:String(url),proxy:target||String(url),accepted:result});return result;};}
   })();</script>`;
 };
 
 const validateTarget = (targetUrl: string): URL | NextResponse => {
   let parsedUrl: URL;
-  try {
-    parsedUrl = new URL(targetUrl);
-  } catch {
-    return NextResponse.json({ error: 'Invalid URL format' }, { status: 400 });
-  }
-
-  if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
-    return NextResponse.json({ error: 'Only HTTP and HTTPS URLs are supported' }, { status: 400 });
-  }
-
-  if (isBlockedDomain(parsedUrl.hostname)) {
-    return NextResponse.json({ error: 'Access to this domain is not allowed' }, { status: 403 });
-  }
-
+  try { parsedUrl = new URL(targetUrl); } catch { return NextResponse.json({ error: 'Invalid URL format' }, { status: 400 }); }
+  if (!['http:', 'https:'].includes(parsedUrl.protocol)) return NextResponse.json({ error: 'Only HTTP and HTTPS URLs are supported' }, { status: 400 });
+  if (isBlockedDomain(parsedUrl.hostname)) return NextResponse.json({ error: 'Access to this domain is not allowed' }, { status: 403 });
   return parsedUrl;
 };
 
 const getTargetUrl = (request: NextRequest): string | NextResponse => {
   const requestUrl = new URL(request.url);
   const targetUrl = requestUrl.searchParams.get('url');
-
   if (!targetUrl) {
-    debugLog('MISSING_URL', {
-      method: request.method,
-      requestUrl: request.url,
-      referer: request.headers.get('referer') || null,
-      userAgent: request.headers.get('user-agent') || null,
-      accept: request.headers.get('accept') || null,
-      secFetchSite: request.headers.get('sec-fetch-site') || null,
-      secFetchDest: request.headers.get('sec-fetch-dest') || null,
-    });
+    debugLog('MISSING_URL', { method: request.method, requestUrl: request.url, referer: request.headers.get('referer') || null, userAgent: request.headers.get('user-agent') || null, accept: request.headers.get('accept') || null, secFetchSite: request.headers.get('sec-fetch-site') || null, secFetchDest: request.headers.get('sec-fetch-dest') || null });
     return NextResponse.json({ error: 'URL parameter is required' }, { status: 400 });
   }
-
   try {
     const destination = new URL(targetUrl);
-    for (const [key, value] of requestUrl.searchParams) {
-      if (key !== 'url') destination.searchParams.append(key, value);
-    }
+    for (const [key,value] of requestUrl.searchParams) if (key !== 'url') destination.searchParams.append(key,value);
     return destination.toString();
-  } catch {
-    return targetUrl;
-  }
+  } catch { return targetUrl; }
 };
 
-const proxyRequest = async (request: NextRequest, method: 'GET' | 'POST' | 'HEAD') => {
+const proxyRequest = async (request: NextRequest, method: 'GET'|'POST'|'HEAD') => {
   try {
-    const target = getTargetUrl(request);
-    if (target instanceof NextResponse) return target;
-
-    const validated = validateTarget(target);
-    if (validated instanceof NextResponse) return validated;
+    const target = getTargetUrl(request); if (target instanceof NextResponse) return target;
+    const validated = validateTarget(target); if (validated instanceof NextResponse) return validated;
     const parsedUrl = validated;
-
-    debugLog('REQUEST', {
-      method,
-      target,
-      hostname: parsedUrl.hostname,
-      pathname: parsedUrl.pathname,
-      hasQuery: parsedUrl.search.length > 0,
-      range: request.headers.get('range') || null,
-      contentType: request.headers.get('content-type') || null,
-    });
+    debugLog('REQUEST',{method,target,hostname:parsedUrl.hostname,pathname:parsedUrl.pathname,hasQuery:parsedUrl.search.length>0,range:request.headers.get('range')||null,contentType:request.headers.get('content-type')||null});
 
     let response;
     try {
       const body = method === 'POST' ? Buffer.from(await request.arrayBuffer()) : undefined;
-
       response = await axios.request({
-        method,
-        url: target,
-        headers: getProxiedHeaders(request.headers, parsedUrl.origin, method === 'POST'),
-        data: body,
-        timeout: 20000,
-        maxRedirects: 10,
-        responseType: 'arraybuffer',
-        validateStatus: () => true,
+        method,url:target,
+        headers:getProxiedHeaders(request.headers,parsedUrl.origin,method==='POST'),
+        data:body,timeout:20000,maxRedirects:10,responseType:'arraybuffer',validateStatus:()=>true,
+        decompress:false,
       });
     } catch (fetchError) {
-      debugLog('FETCH_FAILURE', { method, target, error: String(fetchError) });
-      console.error('Fetch error:', fetchError);
-      return NextResponse.json({ error: 'Failed to reach website' }, { status: 503 });
+      debugLog('FETCH_FAILURE',{method,target,error:String(fetchError)}); console.error('Fetch error:',fetchError);
+      return NextResponse.json({error:'Failed to reach website'},{status:503});
     }
 
-    const rawContentType = response.headers['content-type'];
-    const contentType = typeof rawContentType === 'string' ? rawContentType : 'application/octet-stream';
-    const isHtml = contentType.toLowerCase().includes('text/html');
-    const finalUrl = response.request?.res?.responseUrl || target;
+    const rawContentType=response.headers['content-type'];
+    const contentType=typeof rawContentType==='string'?rawContentType:'application/octet-stream';
+    const isHtml=contentType.toLowerCase().includes('text/html');
+    const contentEncoding=typeof response.headers['content-encoding']==='string'?response.headers['content-encoding']:null;
+    const finalUrl=response.request?.res?.responseUrl||target;
+    const responseBytes=Buffer.isBuffer(response.data)?response.data.length:null;
+    debugLog('RESPONSE',{method,target,finalUrl,status:response.status,contentType,contentEncoding,bytes:responseBytes,redirected:finalUrl!==target,contentLength:response.headers['content-length']||null,contentRange:response.headers['content-range']||null});
 
-    debugLog('RESPONSE', {
-      method,
-      target,
-      finalUrl,
-      status: response.status,
-      contentType,
-      bytes: Buffer.isBuffer(response.data) ? response.data.length : null,
-      redirected: finalUrl !== target,
-      contentLength: response.headers['content-length'] || null,
-      contentRange: response.headers['content-range'] || null,
-    });
-
-    const responseHeaders: Record<string, string> = {
-      'access-control-allow-origin': '*',
-      'access-control-allow-methods': 'GET, POST, HEAD, OPTIONS',
-      'access-control-allow-headers': 'Content-Type, Authorization, Range, X-Requested-With',
-      'access-control-expose-headers': 'Content-Length, Content-Range, Accept-Ranges, Content-Type, ETag',
-      'x-content-type-options': 'nosniff',
-      'cache-control': isHtml ? 'no-cache, no-store, must-revalidate' : 'public, max-age=3600',
-      'content-type': contentType,
+    const responseHeaders: Record<string,string>={
+      'access-control-allow-origin':'*','access-control-allow-methods':'GET, POST, HEAD, OPTIONS','access-control-allow-headers':'Content-Type, Authorization, Range, X-Requested-With','access-control-expose-headers':'Content-Length, Content-Range, Accept-Ranges, Content-Type, ETag','x-content-type-options':'nosniff','cache-control':isHtml?'no-cache, no-store, must-revalidate':'public, max-age=3600','content-type':contentType,
     };
-
-    for (const header of ['content-length', 'content-range', 'accept-ranges', 'etag', 'last-modified']) {
-      const value = response.headers[header];
-      if (typeof value === 'string') responseHeaders[header] = value;
+    for(const header of ['content-length','content-range','accept-ranges','etag','last-modified','content-encoding']){
+      const value=response.headers[header]; if(typeof value==='string') responseHeaders[header]=value;
     }
 
-    if (isHtml) {
-      responseHeaders['content-type'] = 'text/html; charset=utf-8';
-      delete responseHeaders['content-length'];
-      delete responseHeaders['content-range'];
-      delete responseHeaders['accept-ranges'];
-
-      const body = Buffer.from(response.data).toString('utf8');
-      const rewritten = rewriteHtml(body, finalUrl);
-      const bridged = rewritten.replace(/<head\b[^>]*>/i, match => `${match}${createRuntimeBridge(finalUrl)}`);
-
-      return new NextResponse(bridged, {
-        status: response.status,
-        headers: responseHeaders,
-      });
+    if(isHtml){
+      responseHeaders['content-type']='text/html; charset=utf-8';
+      delete responseHeaders['content-length'];delete responseHeaders['content-range'];delete responseHeaders['accept-ranges'];
+      const body=Buffer.from(response.data).toString('utf8');
+      const rewritten=rewriteHtml(body,finalUrl);
+      const bridged=rewritten.replace(/<head\b[^>]*>/i,match=>`${match}${createRuntimeBridge(finalUrl)}`);
+      delete responseHeaders['content-encoding'];
+      return new NextResponse(bridged,{status:response.status,headers:responseHeaders});
     }
 
-    return new NextResponse(method === 'HEAD' ? null : new Uint8Array(response.data), {
-      status: response.status,
-      headers: responseHeaders,
-    });
-  } catch (error) {
-    debugLog('INTERNAL_ERROR', { method, error: String(error) });
-    console.error('Proxy error:', error);
-    return NextResponse.json({ error: 'Internal proxy error' }, { status: 500 });
+    // With decompress:false, the body and Content-Encoding remain paired.
+    // Do not alter Content-Length/Content-Encoding for opaque resources.
+    return new NextResponse(method==='HEAD'?null:new Uint8Array(response.data),{status:response.status,headers:responseHeaders});
+  } catch(error){
+    debugLog('INTERNAL_ERROR',{method,error:String(error)});console.error('Proxy error:',error);
+    return NextResponse.json({error:'Internal proxy error'},{status:500});
   }
 };
 
-export async function GET(request: NextRequest) {
-  return proxyRequest(request, 'GET');
-}
-
-export async function POST(request: NextRequest) {
-  return proxyRequest(request, 'POST');
-}
-
-export async function HEAD(request: NextRequest) {
-  return proxyRequest(request, 'HEAD');
-}
-
-export async function OPTIONS() {
-  return new NextResponse(null, {
-    status: 204,
-    headers: {
-      'access-control-allow-origin': '*',
-      'access-control-allow-methods': 'GET, POST, HEAD, OPTIONS',
-      'access-control-allow-headers': 'Content-Type, Authorization, Range, X-Requested-With',
-      'access-control-max-age': '86400',
-    },
-  });
-}
+export async function GET(request:NextRequest){return proxyRequest(request,'GET');}
+export async function POST(request:NextRequest){return proxyRequest(request,'POST');}
+export async function HEAD(request:NextRequest){return proxyRequest(request,'HEAD');}
+export async function OPTIONS(){return new NextResponse(null,{status:204,headers:{'access-control-allow-origin':'*','access-control-allow-methods':'GET, POST, HEAD, OPTIONS','access-control-allow-headers':'Content-Type, Authorization, Range, X-Requested-With','access-control-max-age':'86400'}});}
