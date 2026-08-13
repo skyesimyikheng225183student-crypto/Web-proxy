@@ -1,6 +1,6 @@
 {
   "name": "web-proxy",
-  "version": "2.5.2",
+  "version": "2.6.2",
   "description": "Accessible web proxy for bypassing simple web restrictions",
   "scripts": {
     "dev": "next dev",
