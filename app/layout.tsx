@@ -5,14 +5,8 @@ export const metadata: Metadata = {
   title: 'test web proxy',
   description: 'is cool ig',
   manifest: '/manifest.json',
-  icons: {
-    apple: '/apple-icon.png',
-  },
-  appleWebApp: {
-    capable: true,
-    statusBarStyle: 'black-translucent',
-    title: 'Web Proxy',
-  },
+  icons: { apple: '/apple-icon.png' },
+  appleWebApp: { capable: true, statusBarStyle: 'black-translucent', title: 'Web Proxy' },
 };
 
 export const viewport: Viewport = {
@@ -23,19 +17,9 @@ export const viewport: Viewport = {
   viewportFit: 'cover',
 };
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
-  const buildDate = new Date('2026-08-13T01:00:00Z').toLocaleString('en-US', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: true,
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  const buildDate = new Date('2026-08-13T03:00:00Z').toLocaleString('en-US', {
+    year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true,
   });
 
   return (
@@ -47,24 +31,8 @@ export default function RootLayout({
       </head>
       <body>
         {children}
-        <div
-          style={{
-            position: 'fixed',
-            bottom: '8px',
-            right: '8px',
-            fontSize: '10px',
-            opacity: 0.5,
-            fontFamily: 'monospace',
-            color: 'var(--text-color)',
-            backgroundColor: 'var(--bg-color)',
-            padding: '4px 8px',
-            borderRadius: '4px',
-            border: '1px solid var(--border-color)',
-            zIndex: 9999,
-          }}
-          title="Build timestamp - check this to see if app updated"
-        >
-          v3.7.2 • {buildDate}
+        <div style={{ position:'fixed', bottom:'8px', right:'8px', fontSize:'10px', opacity:0.5, fontFamily:'monospace', color:'var(--text-color)', backgroundColor:'var(--bg-color)', padding:'4px 8px', borderRadius:'4px', border:'1px solid var(--border-color)', zIndex:9999 }} title="Build timestamp - check this to see if app updated">
+          v3.7.3 • {buildDate}
         </div>
       </body>
     </html>
