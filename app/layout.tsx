@@ -64,7 +64,7 @@ export default function RootLayout({
           }}
           title="Build timestamp - check this to see if app updated"
         >
-          v3.6.2 • {buildDate}
+          v3.7.2 • {buildDate}
         </div>
       </body>
     </html>
