@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import styles from './page.module.css';
 
 type TestResult = {
@@ -51,6 +51,26 @@ export default function DevPage() {
   const [target, setTarget] = useState(DEFAULT_URL);
   const [results, setResults] = useState<TestResult[]>([]);
   const [running, setRunning] = useState<string | null>(null);
+  const [pastedLogs, setPastedLogs] = useState('');
+  const [passwordRequired, setPasswordRequired] = useState(false);
+  const [authenticated, setAuthenticated] = useState(false);
+  const [password, setPassword] = useState('');
+  const [authError, setAuthError] = useState('');
+  const [checkingAuth, setCheckingAuth] = useState(true);
+
+  useEffect(() => {
+    fetch('/api/dev-auth', { cache: 'no-store' })
+      .then(async response => {
+        const data = await response.json();
+        setPasswordRequired(Boolean(data.configured));
+        setAuthenticated(Boolean(data.authenticated) || !data.configured);
+      })
+      .catch(() => {
+        setAuthenticated(true);
+        setPasswordRequired(false);
+      })
+      .finally(() => setCheckingAuth(false));
+  }, []);
 
   const tests = useMemo(() => [
     { id: 'get', name: 'Proxy GET', description: 'Fetch a normal HTML page through the real proxy route.', run: () => runProxyTest('Proxy GET', target, 'GET') },
@@ -74,6 +94,65 @@ export default function DevPage() {
     setRunning(null);
   };
 
+  const unlock = async () => {
+    setAuthError('');
+    try {
+      const response = await fetch('/api/dev-auth', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ password }),
+      });
+      if (!response.ok) {
+        setAuthError('Incorrect password.');
+        return;
+      }
+      setAuthenticated(true);
+      setPassword('');
+    } catch {
+      setAuthError('Could not contact the dev-panel auth endpoint.');
+    }
+  };
+
+  const pasteLogs = async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      setPastedLogs(text);
+    } catch {
+      setAuthError('Clipboard paste was blocked. Tap the log box and paste manually.');
+    }
+  };
+
+  if (checkingAuth) {
+    return <main className={styles.page}><section className={styles.panel}><div className={styles.authBox}>Checking developer panel access…</div></section></main>;
+  }
+
+  if (!authenticated && passwordRequired) {
+    return (
+      <main className={styles.page}>
+        <section className={styles.panel}>
+          <div className={styles.authBox}>
+            <p className={styles.eyebrow}>Web Proxy</p>
+            <h1>Developer Panel</h1>
+            <p>Enter the developer-panel password to continue.</p>
+            <div className={styles.authRow}>
+              <input
+                type="password"
+                value={password}
+                onChange={event => setPassword(event.target.value)}
+                onKeyDown={event => { if (event.key === 'Enter') void unlock(); }}
+                placeholder="Password"
+                autoComplete="current-password"
+              />
+              <button onClick={() => void unlock()}>Unlock</button>
+            </div>
+            {authError && <p className={styles.authError}>{authError}</p>}
+            <a className={styles.homeLink} href="/">← Back to proxy</a>
+          </div>
+        </section>
+      </main>
+    );
+  }
+
   return (
     <main className={styles.page}>
       <section className={styles.panel} aria-labelledby="dev-title">
@@ -88,6 +167,27 @@ export default function DevPage() {
             <a className={styles.homeLink} href="/">← Back to proxy</a>
           </div>
         </div>
+
+        <section className={styles.logImporter} aria-labelledby="log-import-title">
+          <div className={styles.sectionHeader}>
+            <div>
+              <h2 id="log-import-title">Browser Debug Logs</h2>
+              <p>Copy logs from the browser frame, then paste them here. You can also use the clipboard button.</p>
+            </div>
+            <div className={styles.logActions}>
+              <button type="button" onClick={() => void pasteLogs()}>Paste from clipboard</button>
+              <button type="button" className={styles.secondary} onClick={() => setPastedLogs('')} disabled={!pastedLogs}>Clear</button>
+            </div>
+          </div>
+          <textarea
+            value={pastedLogs}
+            onChange={event => setPastedLogs(event.target.value)}
+            placeholder={'Paste PROXY logs here…\n\nExample:\nPROXY CLICK #27 2026-08-13T08:50:28.093Z {"element": {"tag": "button"}}'}
+            spellCheck={false}
+            aria-label="Pasted browser debug logs"
+          />
+          <div className={styles.logMeta}>{pastedLogs ? `${pastedLogs.split(/\r?\n/).length} pasted line${pastedLogs.split(/\r?\n/).length === 1 ? '' : 's'}` : 'No pasted logs yet'}</div>
+        </section>
 
         <div className={styles.targetBox}>
           <label htmlFor="target">Test target URL</label>
