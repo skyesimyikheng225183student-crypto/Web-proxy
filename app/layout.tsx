@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from 'next';
+import { SpeedInsights } from '@vercel/speed-insights/next';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -31,6 +32,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body>
         {children}
+        <SpeedInsights />
         <div style={{ position:'fixed', bottom:'8px', right:'8px', fontSize:'10px', opacity:0.5, fontFamily:'monospace', color:'var(--text-color)', backgroundColor:'var(--bg-color)', padding:'4px 8px', borderRadius:'4px', border:'1px solid var(--border-color)', zIndex:9999 }} title="Build timestamp - check this to see if app updated">
           v3.7.3 • {buildDate}
         </div>
