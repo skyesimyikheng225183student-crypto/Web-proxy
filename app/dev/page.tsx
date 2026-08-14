@@ -57,6 +57,7 @@ export default function DevPage() {
   const [password, setPassword] = useState('');
   const [authError, setAuthError] = useState('');
   const [checkingAuth, setCheckingAuth] = useState(true);
+  const [copiedResults, setCopiedResults] = useState(false);
 
   useEffect(() => {
     fetch('/api/dev-auth', { cache: 'no-store' })
@@ -84,6 +85,7 @@ export default function DevPage() {
     const result = await testRun();
     setResults(previous => [result, ...previous.filter(item => item.name !== result.name)]);
     setRunning(null);
+    setCopiedResults(false);
   };
 
   const runAll = async () => {
@@ -92,6 +94,25 @@ export default function DevPage() {
     for (const test of tests) nextResults.push(await test.run());
     setResults(nextResults);
     setRunning(null);
+    setCopiedResults(false);
+  };
+
+  const copyResults = async () => {
+    if (results.length === 0) return;
+
+    const text = results.map((result, index) => [
+      `${index + 1}. ${result.ok ? 'PASS' : 'FAIL'} · ${result.name}`,
+      `${result.duration} ms${result.status ? ` · HTTP ${result.status}` : ''}`,
+      result.details,
+    ].join('\n')).join('\n\n');
+
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedResults(true);
+      window.setTimeout(() => setCopiedResults(false), 1800);
+    } catch {
+      setAuthError('Could not copy results. Select the results manually and copy them instead.');
+    }
   };
 
   const unlock = async () => {
@@ -197,7 +218,7 @@ export default function DevPage() {
 
         <div className={styles.actions}>
           <button onClick={runAll} disabled={running !== null}>{running === 'all' ? 'Running all…' : 'Run all tests'}</button>
-          <button className={styles.secondary} onClick={() => setResults([])} disabled={running !== null || results.length === 0}>Clear results</button>
+          <button className={styles.secondary} onClick={() => { setResults([]); setCopiedResults(false); }} disabled={running !== null || results.length === 0}>Clear results</button>
         </div>
 
         <div className={styles.tests}>
@@ -210,7 +231,15 @@ export default function DevPage() {
         </div>
 
         <section className={styles.results} aria-labelledby="results-title">
-          <div className={styles.resultsHeader}><h2 id="results-title">Results</h2><span>{results.length} test{results.length === 1 ? '' : 's'}</span></div>
+          <div className={styles.resultsHeader}>
+            <h2 id="results-title">Results</h2>
+            <div className={styles.resultsActions}>
+              <span>{results.length} test{results.length === 1 ? '' : 's'}</span>
+              <button type="button" onClick={() => void copyResults()} disabled={results.length === 0}>
+                {copiedResults ? 'Copied!' : 'Copy results'}
+              </button>
+            </div>
+          </div>
           {results.length === 0 ? <div className={styles.empty}>Run a test. The results will appear here.</div> : <div className={styles.resultList}>{results.map(result => <article className={`${styles.result} ${result.ok ? styles.pass : styles.fail}`} key={result.name}><div className={styles.resultTop}><strong>{result.ok ? 'PASS' : 'FAIL'} · {result.name}</strong><span>{result.duration} ms{result.status ? ` · HTTP ${result.status}` : ''}</span></div><pre>{result.details}</pre></article>)}</div>}
         </section>
       </section>
