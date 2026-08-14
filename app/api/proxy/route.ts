@@ -42,10 +42,21 @@ const getProxiedHeaders = (
 
 const proxyUrl = (url: string): string => `/api/proxy?url=${encodeURIComponent(url)}`;
 
+const isProxyUrl = (value: string, baseUrl?: string): boolean => {
+  const trimmed = value.trim();
+  if (/^\/api\/proxy(?:\?|$)/i.test(trimmed)) return true;
+  try {
+    const parsed = new URL(trimmed, baseUrl || 'https://proxy.invalid/');
+    return parsed.pathname === '/api/proxy' && parsed.searchParams.has('url');
+  } catch {
+    return false;
+  }
+};
+
 const rewriteHtml = (html: string, baseUrl: string): string => {
   const rewrite = (value: string): string => {
     const trimmed = value.trim();
-    if (!trimmed || trimmed.startsWith('#') || /^(data|blob|javascript|mailto|tel):/i.test(trimmed)) return value;
+    if (!trimmed || trimmed.startsWith('#') || isProxyUrl(trimmed) || /^(data|blob|javascript|mailto|tel):/i.test(trimmed)) return value;
     try { return proxyUrl(new URL(trimmed, baseUrl).toString()); } catch { return value; }
   };
   let output = html
@@ -92,15 +103,27 @@ const createRuntimeBridge = (baseUrl: string): string => {
     }
     function __navigate(raw,replace){
       try{
-        if(!raw||/^(#|javascript:|mailto:|tel:|data:|blob:)/i.test(String(raw)))return false;
-        var resolved=new URL(String(raw),__proxyBase);
+        var value=String(raw||'');
+        if(!value||/^(#|javascript:|mailto:|tel:|data:|blob:)/i.test(value))return false;
+        // Never proxy an URL that is already a proxy endpoint. This prevents recursive
+        // /api/proxy?url=/api/proxy?url=... navigation loops.
+        if(/^\/api\/proxy(?:\?|$)/i.test(value)||isProxyAbsolute(value)){
+          __debug('NAVIGATION_SKIP_PROXY',{original:value});
+          return false;
+        }
+        var resolved=new URL(value,__proxyBase);
+        if(resolved.pathname==='/api/proxy'&&resolved.searchParams.has('url')){
+          __debug('NAVIGATION_SKIP_PROXY',{original:value,resolved:resolved.toString()});
+          return false;
+        }
         if(!/^https?:$/i.test(resolved.protocol))return false;
         var target=__proxyPrefix+encodeURIComponent(resolved.toString());
-        __debug('NAVIGATION_REWRITE',{original:String(raw),resolved:resolved.toString(),proxy:target,replace:!!replace});
+        __debug('NAVIGATION_REWRITE',{original:value,resolved:resolved.toString(),proxy:target,replace:!!replace});
         if(replace) location.replace(target); else location.href=target;
         return true;
       }catch(e){__debug('NAVIGATION_REWRITE_ERROR',{original:String(raw),error:String(e)});return false;}
     }
+    function isProxyAbsolute(value){try{var u=new URL(value,location.href);return u.pathname==='/api/proxy'&&u.searchParams.has('url');}catch(e){return false;}}
     window.addEventListener('error',function(event){
       var target=event.target;
       __debug('JS_ERROR',{message:event.message||'Resource error',source:event.filename||'',line:event.lineno||0,column:event.colno||0,target:__element(target),resource:target&&target.src||target&&target.href||null});
