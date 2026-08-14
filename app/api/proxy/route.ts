@@ -90,6 +90,17 @@ const createRuntimeBridge = (baseUrl: string): string => {
         return target;
       }catch(e){__debug('REQUEST_REWRITE_ERROR',{original:String(raw),error:String(e)});return null;}
     }
+    function __navigate(raw,replace){
+      try{
+        if(!raw||/^(#|javascript:|mailto:|tel:|data:|blob:)/i.test(String(raw)))return false;
+        var resolved=new URL(String(raw),__proxyBase);
+        if(!/^https?:$/i.test(resolved.protocol))return false;
+        var target=__proxyPrefix+encodeURIComponent(resolved.toString());
+        __debug('NAVIGATION_REWRITE',{original:String(raw),resolved:resolved.toString(),proxy:target,replace:!!replace});
+        if(replace) location.replace(target); else location.href=target;
+        return true;
+      }catch(e){__debug('NAVIGATION_REWRITE_ERROR',{original:String(raw),error:String(e)});return false;}
+    }
     window.addEventListener('error',function(event){
       var target=event.target;
       __debug('JS_ERROR',{message:event.message||'Resource error',source:event.filename||'',line:event.lineno||0,column:event.colno||0,target:__element(target),resource:target&&target.src||target&&target.href||null});
@@ -100,6 +111,10 @@ const createRuntimeBridge = (baseUrl: string): string => {
     document.addEventListener('click',function(event){
       var el=event.target&&event.target.closest?event.target.closest('a,button,input,select,textarea,[role="button"]'):event.target;
       __debug('CLICK',{element:__element(el),button:event.button,defaultPrevented:event.defaultPrevented,detail:event.detail});
+      if(event.defaultPrevented||event.button!==0||!el||el.tagName.toLowerCase()!=='a')return;
+      var href=el.getAttribute('href');
+      if(!href||el.hasAttribute('download')||el.target==='_blank'||el.target==='_top')return;
+      if(__navigate(href,false))event.preventDefault();
     },true);
     document.addEventListener('pointerdown',function(event){
       var el=event.target&&event.target.closest?event.target.closest('a,button,input,select,textarea,[role="button"]'):event.target;
@@ -109,32 +124,44 @@ const createRuntimeBridge = (baseUrl: string): string => {
     document.addEventListener('submit',function(event){
       var form=event.target;if(!form||!form.getAttribute)return;
       var destination=form.getAttribute('data-web-proxy-action');
-      __debug('FORM_EVENT',{method:(form.getAttribute('method')||'GET').toUpperCase(),action:destination||form.getAttribute('action')||location.href,defaultPrevented:event.defaultPrevented});
+      var method=(form.getAttribute('method')||'GET').toUpperCase();
+      __debug('FORM_EVENT',{method:method,action:destination||form.getAttribute('action')||location.href,defaultPrevented:event.defaultPrevented});
       if(!destination)return;
-      var method=(form.getAttribute('method')||'GET').toUpperCase();if(method!=='GET')return;
       event.preventDefault();
       try{
-        var target=new URL(destination,__proxyBase),data=new FormData(form);
-        data.forEach(function(value,key){if(typeof value==='string')target.searchParams.append(key,value);});
-        var proxied=__proxyPrefix+encodeURIComponent(target.toString());
-        __debug('FORM_SUBMIT',{method:'GET',destination:destination,target:target.toString(),proxy:proxied});window.location.href=proxied;
+        var target=new URL(destination,__proxyBase);
+        if(method==='GET'){
+          var data=new FormData(form);data.forEach(function(value,key){if(typeof value==='string')target.searchParams.append(key,value);});
+          var proxied=__proxyPrefix+encodeURIComponent(target.toString());
+          __debug('FORM_SUBMIT',{method:'GET',destination:destination,target:target.toString(),proxy:proxied});location.href=proxied;
+        }else if(method==='POST'){
+          var postProxy=__proxyPrefix+encodeURIComponent(target.toString());
+          __debug('FORM_SUBMIT',{method:'POST',destination:destination,target:target.toString(),proxy:postProxy});
+          form.action=postProxy;form.removeAttribute('data-web-proxy-action');form.submit();
+        }else{
+          __debug('FORM_SUBMIT_UNSUPPORTED',{method:method,destination:destination});
+          __navigate(target.toString(),false);
+        }
       }catch(e){__debug('FORM_SUBMIT_ERROR',{error:String(e)});}
     },true);
     window.addEventListener('beforeunload',function(){__debug('BEFORE_UNLOAD',{location:location.href});});
     window.addEventListener('hashchange',function(){__debug('HASH_CHANGE',{location:location.href});});
     window.addEventListener('popstate',function(){__debug('POPSTATE',{location:location.href});});
     var __push=history.pushState, __replace=history.replaceState;
-    history.pushState=function(){var result=__push.apply(this,arguments);__debug('HISTORY_PUSH',{location:location.href});return result;};
-    history.replaceState=function(){var result=__replace.apply(this,arguments);__debug('HISTORY_REPLACE',{location:location.href});return result;};
+    history.pushState=function(state,title,url){if(url&&__navigate(url,false))return;var result=__push.apply(this,arguments);__debug('HISTORY_PUSH',{location:location.href});return result;};
+    history.replaceState=function(state,title,url){if(url&&__navigate(url,true))return;var result=__replace.apply(this,arguments);__debug('HISTORY_REPLACE',{location:location.href});return result;};
     var __fetch=window.fetch;
     window.fetch=function(input,init){var target=__proxyTarget(input);if(!target){__debug('FETCH_PASSTHROUGH',{input:__safe(input)});return __fetch.call(this,input,init);}__debug('FETCH_START',{proxy:target,method:(init&&init.method)||'GET'});return __fetch.call(this,typeof input==='object'&&input instanceof Request?new Request(target,input):target,init).then(function(response){__debug('FETCH_RESPONSE',{status:response.status,ok:response.ok,url:response.url});return response;}).catch(function(error){__debug('FETCH_ERROR',{error:String(error),proxy:target});throw error;});};
     var __open=XMLHttpRequest.prototype.open,__send=XMLHttpRequest.prototype.send;
     XMLHttpRequest.prototype.open=function(method,url,async,user,password){var target=__proxyTarget(url);this.__webProxyDebugUrl=target||url;__debug('XHR_OPEN',{method:method,url:String(url),proxy:target||String(url)});return __open.call(this,method,target||url,async,user,password);};
     XMLHttpRequest.prototype.send=function(body){var xhr=this;__debug('XHR_SEND',{url:xhr.__webProxyDebugUrl||'',bodyType:body&&body.constructor?body.constructor.name:typeof body});xhr.addEventListener('load',function(){__debug('XHR_RESPONSE',{status:xhr.status,url:xhr.responseURL||xhr.__webProxyDebugUrl});});xhr.addEventListener('error',function(){__debug('XHR_ERROR',{status:xhr.status,url:xhr.__webProxyDebugUrl||''});});xhr.addEventListener('abort',function(){__debug('XHR_ABORT',{url:xhr.__webProxyDebugUrl||''});});xhr.addEventListener('timeout',function(){__debug('XHR_TIMEOUT',{url:xhr.__webProxyDebugUrl||''});});return __send.call(this,body);};
     if(navigator.sendBeacon){var __beacon=navigator.sendBeacon.bind(navigator);navigator.sendBeacon=function(url,data){var target=__proxyTarget(url),result=__beacon(target||url,data);__debug('BEACON',{url:String(url),proxy:target||String(url),accepted:result});return result;};}
-    try{if(navigator.serviceWorker){__debug('SERVICE_WORKER_STATE',{supported:true,controller:!!navigator.serviceWorker.controller});navigator.serviceWorker.addEventListener('controllerchange',function(){__debug('SERVICE_WORKER_CONTROLLER_CHANGE',{controller:!!navigator.serviceWorker.controller});});navigator.serviceWorker.getRegistrations().then(function(regs){__debug('SERVICE_WORKER_REGISTRATIONS',{count:regs.length,scopes:regs.map(function(r){return r.scope;})});}).catch(function(e){__debug('SERVICE_WORKER_ERROR',{stage:'getRegistrations',error:String(e)});});}}catch(e){__debug('SERVICE_WORKER_ERROR',{stage:'init',error:String(e)});}
-    try{if(performance&&performance.getEntriesByType){setTimeout(function(){var entries=performance.getEntriesByType('resource').slice(-100).map(function(e){return {name:e.name,initiatorType:e.initiatorType,duration:Math.round(e.duration),transferSize:e.transferSize||0};});__debug('RESOURCE_TIMING',{count:entries.length,entries:entries});},1000);}}catch(e){__debug('RESOURCE_TIMING_ERROR',{error:String(e)});}
-    try{var __log=console.log,__warn=console.warn,__error=console.error;console.log=function(){__debug('CONSOLE_LOG',{args:Array.prototype.slice.call(arguments).map(function(x){return __safe(x,500);})});return __log.apply(this,arguments);};console.warn=function(){__debug('CONSOLE_WARN',{args:Array.prototype.slice.call(arguments).map(function(x){return __safe(x,500);})});return __warn.apply(this,arguments);};console.error=function(){__debug('CONSOLE_ERROR',{args:Array.prototype.slice.call(arguments).map(function(x){return __safe(x,1000);})});return __error.apply(this,arguments);};}catch(e){__debug('CONSOLE_HOOK_ERROR',{error:String(e)});}
+    try{if(navigator.serviceWorker){__debug('SERVICE_WORKER_STATE',{supported:true,controller:!!navigator.serviceWorker.controller});navigator.serviceWorker.addEventListener('controllerchange',function(){__debug('SERVICE_WORKER_CONTROLLER_CHANGE',{controller:!!navigator.serviceWorker.controller});});navigator.serviceWorker.getRegistrations().then(function(regs){__debug('SERVICE_WORKER_REGISTRATIONS',{count:regs.length,scopes:regs.map(function(r){return r.scope;})});}).catch(function(e){__debug('SERVICE_WORKER_ERROR',{stage:'getRegistrations',error:String(e)});});}}catch(e){__debug('SERVICE_WORKER_ERROR',{stage:'init',error:String(e)});
+    }
+    try{if(performance&&performance.getEntriesByType){setTimeout(function(){var entries=performance.getEntriesByType('resource').slice(-100).map(function(e){return {name:e.name,initiatorType:e.initiatorType,duration:Math.round(e.duration),transferSize:e.transferSize||0};});__debug('RESOURCE_TIMING',{count:entries.length,entries:entries});},1000);}}catch(e){__debug('RESOURCE_TIMING_ERROR',{error:String(e)});
+    }
+    try{var __log=console.log,__warn=console.warn,__error=console.error;console.log=function(){__debug('CONSOLE_LOG',{args:Array.prototype.slice.call(arguments).map(function(x){return __safe(x,500);})});return __log.apply(this,arguments);};console.warn=function(){__debug('CONSOLE_WARN',{args:Array.prototype.slice.call(arguments).map(function(x){return __safe(x,500);})});return __warn.apply(this,arguments);};console.error=function(){__debug('CONSOLE_ERROR',{args:Array.prototype.slice.call(arguments).map(function(x){return __safe(x,1000);})});return __error.apply(this,arguments);};}catch(e){__debug('CONSOLE_HOOK_ERROR',{error:String(e)});
+    }
   })();</script>`;
 };
 
