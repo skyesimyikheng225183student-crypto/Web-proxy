@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import styles from './page.module.css';
 
 type TestResult = {
@@ -52,26 +52,8 @@ export default function DevPage() {
   const [results, setResults] = useState<TestResult[]>([]);
   const [running, setRunning] = useState<string | null>(null);
   const [pastedLogs, setPastedLogs] = useState('');
-  const [passwordRequired, setPasswordRequired] = useState(false);
-  const [authenticated, setAuthenticated] = useState(false);
-  const [password, setPassword] = useState('');
-  const [authError, setAuthError] = useState('');
-  const [checkingAuth, setCheckingAuth] = useState(true);
   const [copiedResults, setCopiedResults] = useState(false);
-
-  useEffect(() => {
-    fetch('/api/dev-auth', { cache: 'no-store' })
-      .then(async response => {
-        const data = await response.json();
-        setPasswordRequired(Boolean(data.configured));
-        setAuthenticated(Boolean(data.authenticated) || !data.configured);
-      })
-      .catch(() => {
-        setAuthenticated(true);
-        setPasswordRequired(false);
-      })
-      .finally(() => setCheckingAuth(false));
-  }, []);
+  const [clipboardError, setClipboardError] = useState('');
 
   const tests = useMemo(() => [
     { id: 'get', name: 'Proxy GET', description: 'Fetch a normal HTML page through the real proxy route.', run: () => runProxyTest('Proxy GET', target, 'GET') },
@@ -109,28 +91,10 @@ export default function DevPage() {
     try {
       await navigator.clipboard.writeText(text);
       setCopiedResults(true);
+      setClipboardError('');
       window.setTimeout(() => setCopiedResults(false), 1800);
     } catch {
-      setAuthError('Could not copy results. Select the results manually and copy them instead.');
-    }
-  };
-
-  const unlock = async () => {
-    setAuthError('');
-    try {
-      const response = await fetch('/api/dev-auth', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ password }),
-      });
-      if (!response.ok) {
-        setAuthError('Incorrect password.');
-        return;
-      }
-      setAuthenticated(true);
-      setPassword('');
-    } catch {
-      setAuthError('Could not contact the dev-panel auth endpoint.');
+      setClipboardError('Could not copy results. Select the results manually and copy them instead.');
     }
   };
 
@@ -138,41 +102,11 @@ export default function DevPage() {
     try {
       const text = await navigator.clipboard.readText();
       setPastedLogs(text);
+      setClipboardError('');
     } catch {
-      setAuthError('Clipboard paste was blocked. Tap the log box and paste manually.');
+      setClipboardError('Clipboard paste was blocked. Tap the log box and paste manually.');
     }
   };
-
-  if (checkingAuth) {
-    return <main className={styles.page}><section className={styles.panel}><div className={styles.authBox}>Checking developer panel access…</div></section></main>;
-  }
-
-  if (!authenticated && passwordRequired) {
-    return (
-      <main className={styles.page}>
-        <section className={styles.panel}>
-          <div className={styles.authBox}>
-            <p className={styles.eyebrow}>Web Proxy</p>
-            <h1>Developer Panel</h1>
-            <p>Enter the developer-panel password to continue.</p>
-            <div className={styles.authRow}>
-              <input
-                type="password"
-                value={password}
-                onChange={event => setPassword(event.target.value)}
-                onKeyDown={event => { if (event.key === 'Enter') void unlock(); }}
-                placeholder="Password"
-                autoComplete="current-password"
-              />
-              <button onClick={() => void unlock()}>Unlock</button>
-            </div>
-            {authError && <p className={styles.authError}>{authError}</p>}
-            <a className={styles.homeLink} href="/">← Back to proxy</a>
-          </div>
-        </section>
-      </main>
-    );
-  }
 
   return (
     <main className={styles.page}>
@@ -210,6 +144,8 @@ export default function DevPage() {
           <div className={styles.logMeta}>{pastedLogs ? `${pastedLogs.split(/\r?\n/).length} pasted line${pastedLogs.split(/\r?\n/).length === 1 ? '' : 's'}` : 'No pasted logs yet'}</div>
         </section>
 
+        {clipboardError && <p className={styles.clipboardError} role="status">{clipboardError}</p>}
+
         <div className={styles.targetBox}>
           <label htmlFor="target">Test target URL</label>
           <input id="target" value={target} onChange={event => setTarget(event.target.value)} spellCheck={false} inputMode="url" />
@@ -217,7 +153,7 @@ export default function DevPage() {
         </div>
 
         <div className={styles.actions}>
-          <button onClick={runAll} disabled={running !== null}>{running === 'all' ? 'Running all…' : 'Run all tests'}</button>
+          <button onClick={() => void runAll()} disabled={running !== null}>{running === 'all' ? 'Running all…' : 'Run all tests'}</button>
           <button className={styles.secondary} onClick={() => { setResults([]); setCopiedResults(false); }} disabled={running !== null || results.length === 0}>Clear results</button>
         </div>
 
@@ -225,7 +161,7 @@ export default function DevPage() {
           {tests.map(test => (
             <article className={styles.test} key={test.id}>
               <div className={styles.testInfo}><h2>{test.name}</h2><p>{test.description}</p></div>
-              <button className={styles.runButton} onClick={() => runTest(test.id, test.run)} disabled={running !== null}>{running === test.id ? 'Running…' : 'Run'}</button>
+              <button className={styles.runButton} onClick={() => void runTest(test.id, test.run)} disabled={running !== null}>{running === test.id ? 'Running…' : 'Run'}</button>
             </article>
           ))}
         </div>
