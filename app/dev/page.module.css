@@ -18,6 +18,17 @@
   margin-bottom: 24px;
 }
 
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.devLink {
+  font-weight: 700;
+  text-decoration: none;
+}
+
 .eyebrow {
   margin: 0 0 6px;
   font-size: 12px;
@@ -47,11 +58,86 @@
 
 .targetBox,
 .test,
-.results {
+.results,
+.logImporter {
   border: 1px solid #d9dde2;
   border-radius: 14px;
   background: #fff;
   box-shadow: 0 2px 10px rgba(0,0,0,.04);
+}
+
+.logImporter {
+  padding: 18px;
+  margin-bottom: 14px;
+}
+
+.sectionHeader,
+.resultsHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.sectionHeader h2 {
+  margin: 0 0 4px;
+  font-size: 20px;
+}
+
+.sectionHeader p {
+  margin: 0;
+  color: #626870;
+  font-size: 13px;
+}
+
+.logActions,
+.resultsActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.logActions button,
+.resultsActions button {
+  border: 1px solid #c5cad0;
+  border-radius: 8px;
+  padding: 8px 11px;
+  background: #fff;
+  color: #25282c;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.logActions button:disabled,
+.resultsActions button:disabled {
+  cursor: not-allowed;
+  opacity: .5;
+}
+
+.logImporter textarea {
+  width: 100%;
+  min-height: 210px;
+  box-sizing: border-box;
+  resize: vertical;
+  border: 1px solid #bfc5cc;
+  border-radius: 9px;
+  padding: 12px;
+  font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  background: #fafafa;
+}
+
+.logMeta {
+  margin-top: 7px;
+  color: #6b7179;
+  font-size: 12px;
+}
+
+.clipboardError {
+  margin: -4px 0 14px;
+  color: #9b2525;
+  font-size: 13px;
 }
 
 .targetBox {
@@ -140,13 +226,6 @@
   padding: 18px;
 }
 
-.resultsHeader {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 12px;
-}
-
 .resultsHeader h2 {
   margin: 0;
   font-size: 20px;
@@ -209,9 +288,17 @@
 @media (max-width: 650px) {
   .header,
   .test,
-  .resultTop {
+  .resultTop,
+  .sectionHeader {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .headerActions,
+  .logActions,
+  .resultsActions {
+    align-items: stretch;
+    flex-wrap: wrap;
   }
 
   .homeLink {
