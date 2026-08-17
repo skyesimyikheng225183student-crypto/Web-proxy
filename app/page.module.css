@@ -52,6 +52,7 @@
   left: 1.5rem;
   width: 42px;
   font-size: 1.15rem;
+  cursor: pointer;
 }
 
 .devButton {
@@ -68,6 +69,205 @@
 .settingsButton:active,
 .devButton:active {
   transform: translateY(-50%) scale(0.98);
+}
+
+.settingsOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: max(5rem, env(safe-area-inset-top) + 1rem) 1rem 1rem;
+  background: rgba(0, 0, 0, 0.42);
+  overflow-y: auto;
+}
+
+.settingsPanel {
+  width: min(720px, 100%);
+  max-height: calc(100vh - 6rem);
+  overflow-y: auto;
+  padding: 1.5rem;
+  border: 1px solid var(--border-color);
+  border-radius: 1rem;
+  background: var(--secondary-color);
+  color: var(--text-color);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.28);
+}
+
+.settingsHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.settingsHeader h2 {
+  margin: 0;
+  font-size: clamp(1.8rem, 6vw, 2.4rem);
+}
+
+.settingsHeader p {
+  margin: 0.35rem 0 0;
+  opacity: 0.7;
+}
+
+.settingsEyebrow {
+  margin: 0 0 0.2rem !important;
+  font-size: 0.7rem !important;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  opacity: 0.65 !important;
+}
+
+.settingsClose {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  flex: 0 0 40px;
+  border: 1px solid var(--border-color);
+  border-radius: 0.6rem;
+  background: var(--bg-color);
+  color: var(--text-color);
+  font-size: 1.5rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.settingsSection {
+  padding: 1.25rem 0;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.settingsSection:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.settingsSection h3 {
+  margin: 0 0 0.75rem;
+  font-size: 1.05rem;
+}
+
+.settingsSection p {
+  margin: 0.25rem 0 0;
+  opacity: 0.68;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.sectionHeading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.settingRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem;
+  border: 1px solid var(--border-color);
+  border-radius: 0.75rem;
+}
+
+.status,
+.counter {
+  flex: 0 0 auto;
+  padding: 0.35rem 0.65rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent-color) 15%, transparent);
+  color: var(--accent-color);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.codeForm {
+  margin-top: 1rem;
+}
+
+.codeForm label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.codeRow {
+  display: flex;
+  gap: 0.6rem;
+}
+
+.codeRow input {
+  min-width: 0;
+  flex: 1;
+  padding: 0.8rem 0.9rem;
+  border: 1px solid var(--border-color);
+  border-radius: 0.65rem;
+  background: var(--bg-color);
+  color: var(--text-color);
+  font: inherit;
+}
+
+.codeRow button,
+.clearButton {
+  border: 0;
+  border-radius: 0.65rem;
+  padding: 0.8rem 1rem;
+  background: var(--accent-color);
+  color: white;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.codeRow button:hover,
+.clearButton:hover {
+  filter: brightness(0.95);
+}
+
+.message {
+  margin: 0.6rem 0 0 !important;
+  font-size: 0.85rem !important;
+}
+
+.discoveryList {
+  display: grid;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.discoveryRow {
+  display: grid;
+  grid-template-columns: 28px 1fr auto;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  border-radius: 0.65rem;
+  background: var(--bg-color);
+  font-size: 0.85rem;
+}
+
+.discoveryRow > span:first-child {
+  color: var(--accent-color);
+  font-weight: 800;
+}
+
+.discoveryRow > span:last-child {
+  opacity: 0.55;
+  font-size: 0.75rem;
+}
+
+.clearButton {
+  margin-top: 0.9rem;
+  background: transparent;
+  color: var(--text-color);
+  border: 1px solid var(--border-color);
 }
 
 .main {
@@ -155,7 +355,29 @@
     transform: scale(0.98);
   }
 
-  .main {
-    padding: 0.75rem;
+  .settingsOverlay {
+    padding: 4.5rem 0.75rem 0.75rem;
+  }
+
+  .settingsPanel {
+    max-height: calc(100vh - 5.25rem);
+    padding: 1rem;
+    border-radius: 0.85rem;
+  }
+
+  .codeRow {
+    flex-direction: column;
+  }
+
+  .codeRow button {
+    width: 100%;
+  }
+
+  .discoveryRow {
+    grid-template-columns: 24px 1fr;
+  }
+
+  .discoveryRow > span:last-child {
+    grid-column: 2;
   }
 }
