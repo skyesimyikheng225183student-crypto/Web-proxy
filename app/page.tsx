@@ -18,6 +18,7 @@ const EFFECT_DURATION: Record<EasterEgg, number> = {
   glitch: 1800,
   retro: 3000,
   barrelRoll: 1100,
+  doAFlip: 1100,
 };
 
 const EGG_LABELS: Record<EasterEgg, string> = {
@@ -25,6 +26,7 @@ const EGG_LABELS: Record<EasterEgg, string> = {
   glitch: 'Glitch',
   retro: 'Retro',
   barrelRoll: 'Barrel Roll',
+  doAFlip: 'Do a Flip',
 };
 
 export default function Home() {
@@ -46,9 +48,7 @@ export default function Home() {
     setError(errorMessage);
   };
 
-  const handleLoad = () => {
-    // Silent success - logs stay in BrowserFrame component
-  };
+  const handleLoad = () => {};
 
   const triggerEasterEgg = (egg: EasterEgg) => {
     const discovered = discoverEasterEgg(egg);
@@ -61,7 +61,7 @@ export default function Home() {
 
     if (allCoreEasterEggsDiscovered(discovered)) {
       setEasterEggCombo(true);
-      setActiveEggs(['terminal', 'glitch', 'retro', 'barrelRoll']);
+      setActiveEggs(['terminal', 'glitch', 'retro', 'barrelRoll', 'doAFlip']);
       window.setTimeout(() => {
         setEasterEggCombo(false);
         setActiveEggs([]);
@@ -93,9 +93,7 @@ export default function Home() {
   const clearDiscoveries = () => {
     try {
       window.localStorage.removeItem('web-proxy-easter-eggs');
-    } catch {
-      // Ignore storage failures.
-    }
+    } catch {}
     setDiscoveredEggs([]);
     setSettingsMessage('Easter egg discoveries cleared.');
   };
@@ -123,98 +121,55 @@ export default function Home() {
         activeEggs.includes('glitch') ? 'egg-glitch' : '',
         activeEggs.includes('retro') ? 'egg-retro' : '',
         activeEggs.includes('barrelRoll') ? 'egg-barrel-roll' : '',
+        activeEggs.includes('doAFlip') ? 'egg-do-a-flip' : '',
         easterEggCombo ? 'egg-shatter-combo' : '',
       ].filter(Boolean).join(' ')}
       data-easter-eggs-discovered={discoveredEggs.length}
     >
       <header className={styles.header} role="banner">
-        <button
-          type="button"
-          className={styles.settingsButton}
-          aria-label="Open settings"
-          aria-expanded={settingsOpen}
-          onClick={() => {
-            setSettingsOpen((open) => !open);
-            setSettingsMessage('');
-          }}
-        >
+        <button type="button" className={styles.settingsButton} aria-label="Open settings" aria-expanded={settingsOpen} onClick={() => { setSettingsOpen((open) => !open); setSettingsMessage(''); }}>
           ⚙
         </button>
         <div className={styles.headerTitle}>
           <h1>Web Proxy test</h1>
           <p>currently testin, dont expect much.</p>
         </div>
-        <a className={styles.devButton} href="/dev">
-          Developer Panel
-        </a>
+        <a className={styles.devButton} href="/dev">Developer Panel</a>
       </header>
 
       {settingsOpen && (
-        <div
-          className={styles.settingsOverlay}
-          role="presentation"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) setSettingsOpen(false);
-          }}
-        >
-          <section
-            className={styles.settingsPanel}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="settings-title"
-          >
+        <div className={styles.settingsOverlay} role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setSettingsOpen(false); }}>
+          <section className={styles.settingsPanel} role="dialog" aria-modal="true" aria-labelledby="settings-title">
             <div className={styles.settingsHeader}>
               <div>
                 <p className={styles.settingsEyebrow}>WEB PROXY</p>
                 <h2 id="settings-title">Settings</h2>
                 <p>Configure the proxy and explore what is hidden.</p>
               </div>
-              <button
-                type="button"
-                className={styles.settingsClose}
-                aria-label="Close settings"
-                onClick={() => setSettingsOpen(false)}
-              >
-                ×
-              </button>
+              <button type="button" className={styles.settingsClose} aria-label="Close settings" onClick={() => setSettingsOpen(false)}>×</button>
             </div>
 
             <section className={styles.settingsSection} aria-labelledby="general-heading">
               <h3 id="general-heading">General</h3>
               <div className={styles.settingRow}>
-                <div>
-                  <strong>Proxy status</strong>
-                  <p>The proxy is ready to load a website.</p>
-                </div>
+                <div><strong>Proxy status</strong><p>The proxy is ready to load a website.</p></div>
                 <span className={styles.status}>Online</span>
               </div>
             </section>
 
             <section className={styles.settingsSection} aria-labelledby="secrets-heading">
               <div className={styles.sectionHeading}>
-                <div>
-                  <h3 id="secrets-heading">Secret codes</h3>
-                  <p>Found codes can unlock hidden effects.</p>
-                </div>
-                <span className={styles.counter}>{discoveredEggs.length}/4</span>
+                <div><h3 id="secrets-heading">Secret codes</h3><p>Found codes can unlock hidden effects.</p></div>
+                <span className={styles.counter}>{discoveredEggs.length}/5</span>
               </div>
 
               <form onSubmit={handleCodeSubmit} className={styles.codeForm}>
                 <label htmlFor="secret-code">Enter a code</label>
                 <div className={styles.codeRow}>
-                  <input
-                    id="secret-code"
-                    value={code}
-                    onChange={(event) => setCode(event.target.value)}
-                    placeholder="Enter secret code..."
-                    autoComplete="off"
-                    spellCheck={false}
-                  />
+                  <input id="secret-code" value={code} onChange={(event) => setCode(event.target.value)} placeholder="Enter secret code..." autoComplete="off" spellCheck={false} />
                   <button type="submit">Unlock</button>
                 </div>
-                {settingsMessage && (
-                  <p className={styles.message} role="status">{settingsMessage}</p>
-                )}
+                {settingsMessage && <p className={styles.message} role="status">{settingsMessage}</p>}
               </form>
 
               <div className={styles.discoveryList}>
@@ -227,19 +182,12 @@ export default function Home() {
                 ))}
               </div>
 
-              {discoveredEggs.length > 0 && (
-                <button type="button" className={styles.clearButton} onClick={clearDiscoveries}>
-                  Clear discoveries
-                </button>
-              )}
+              {discoveredEggs.length > 0 && <button type="button" className={styles.clearButton} onClick={clearDiscoveries}>Clear discoveries</button>}
             </section>
 
             <section className={styles.settingsSection} aria-labelledby="about-heading">
               <h3 id="about-heading">About</h3>
-              <p className={styles.aboutText}>
-                Settings is built into the proxy so it can always be opened with the button above.
-                The Developer Panel remains separate and untouched.
-              </p>
+              <p className={styles.aboutText}>Settings is built into the proxy, so it is opened with the button above. The Developer Panel remains separate and untouched.</p>
             </section>
           </section>
         </div>
@@ -247,21 +195,11 @@ export default function Home() {
 
       <main className={styles.main} role="main">
         <ProxyForm onRequest={handleProxyRequest} onSpecialInput={handleSpecialInput} />
-
-        {error && (
-          <div className={styles.error} role="alert" aria-live="polite" aria-atomic="true">
-            <strong>Error:</strong> {error}
-          </div>
-        )}
-
-        {url && (
-          <BrowserFrame url={url} onLoad={handleLoad} onError={handleError} />
-        )}
+        {error && <div className={styles.error} role="alert" aria-live="polite" aria-atomic="true"><strong>Error:</strong> {error}</div>}
+        {url && <BrowserFrame url={url} onLoad={handleLoad} onError={handleError} />}
       </main>
 
-      <footer className={styles.footer} role="contentinfo">
-        <p>made for apple, may not work elsewhere, idk tbh.</p>
-      </footer>
+      <footer className={styles.footer} role="contentinfo"><p>made for apple, may not work elsewhere, idk tbh.</p></footer>
     </div>
   );
 }
