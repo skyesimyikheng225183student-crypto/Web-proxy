@@ -13,14 +13,6 @@ import {
   type EasterEgg,
 } from '@/lib/easterEggs';
 
-const EFFECT_DURATION: Record<EasterEgg, number> = {
-  terminal: 3000,
-  glitch: 1800,
-  retro: 3000,
-  barrelRoll: 1100,
-  doAFlip: 1100,
-};
-
 const EGG_LABELS: Record<EasterEgg, string> = {
   terminal: 'Terminal',
   glitch: 'Glitch',
@@ -44,28 +36,24 @@ export default function Home() {
     setError('');
   };
 
-  const handleError = (errorMessage: string) => {
-    setError(errorMessage);
-  };
-
+  const handleError = (errorMessage: string) => setError(errorMessage);
   const handleLoad = () => {};
 
   const triggerEasterEgg = (egg: EasterEgg) => {
     const discovered = discoverEasterEgg(egg);
     setDiscoveredEggs(discovered);
-    setActiveEggs((current) => [...current.filter((item) => item !== egg), egg]);
-
-    window.setTimeout(() => {
-      setActiveEggs((current) => current.filter((item) => item !== egg));
-    }, EFFECT_DURATION[egg]);
+    setActiveEggs((current) => current.includes(egg) ? current : [...current, egg]);
 
     if (allCoreEasterEggsDiscovered(discovered)) {
       setEasterEggCombo(true);
       setActiveEggs(['terminal', 'glitch', 'retro', 'barrelRoll', 'doAFlip']);
-      window.setTimeout(() => {
-        setEasterEggCombo(false);
-        setActiveEggs([]);
-      }, 2600);
+    }
+  };
+
+  const disableEasterEgg = (egg: EasterEgg) => {
+    setActiveEggs((current) => current.filter((item) => item !== egg));
+    if (egg === 'barrelRoll' || egg === 'doAFlip') {
+      setEasterEggCombo(false);
     }
   };
 
@@ -79,21 +67,17 @@ export default function Home() {
   const handleCodeSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const egg = findEasterEgg(code);
-
     if (!egg) {
       setSettingsMessage('That code did not work.');
       return;
     }
-
     triggerEasterEgg(egg);
     setCode('');
-    setSettingsMessage(`${EGG_LABELS[egg]} effect discovered.`);
+    setSettingsMessage(`${EGG_LABELS[egg]} enabled. It will stay active until disabled.`);
   };
 
   const clearDiscoveries = () => {
-    try {
-      window.localStorage.removeItem('web-proxy-easter-eggs');
-    } catch {}
+    try { window.localStorage.removeItem('web-proxy-easter-eggs'); } catch {}
     setDiscoveredEggs([]);
     setSettingsMessage('Easter egg discoveries cleared.');
   };
@@ -108,7 +92,6 @@ export default function Home() {
       const gamma = Math.abs(event.gamma ?? 0);
       if (beta > 140 || gamma > 140) triggerEasterEgg('barrelRoll');
     };
-
     window.addEventListener('deviceorientation', handleDeviceOrientation);
     return () => window.removeEventListener('deviceorientation', handleDeviceOrientation);
   }, []);
@@ -159,7 +142,7 @@ export default function Home() {
 
             <section className={styles.settingsSection} aria-labelledby="secrets-heading">
               <div className={styles.sectionHeading}>
-                <div><h3 id="secrets-heading">Secret codes</h3><p>Found codes can unlock hidden effects.</p></div>
+                <div><h3 id="secrets-heading">Secret codes</h3><p>Enter a discovered code to enable its effect. Effects stay active until disabled.</p></div>
                 <span className={styles.counter}>{discoveredEggs.length}/5</span>
               </div>
 
@@ -167,19 +150,28 @@ export default function Home() {
                 <label htmlFor="secret-code">Enter a code</label>
                 <div className={styles.codeRow}>
                   <input id="secret-code" value={code} onChange={(event) => setCode(event.target.value)} placeholder="Enter secret code..." autoComplete="off" spellCheck={false} />
-                  <button type="submit">Unlock</button>
+                  <button type="submit">Enable</button>
                 </div>
                 {settingsMessage && <p className={styles.message} role="status">{settingsMessage}</p>}
               </form>
 
               <div className={styles.discoveryList}>
-                {(Object.keys(EASTER_EGG_CODES) as EasterEgg[]).map((egg) => (
-                  <div key={egg} className={styles.discoveryRow}>
-                    <span>{discoveredEggs.includes(egg) ? '✓' : '•'}</span>
-                    <span>{discoveredEggs.includes(egg) ? EGG_LABELS[egg] : '???'}</span>
-                    <span>{discoveredEggs.includes(egg) ? 'Discovered' : 'Undiscovered'}</span>
-                  </div>
-                ))}
+                {(Object.keys(EASTER_EGG_CODES) as EasterEgg[]).map((egg) => {
+                  const discovered = discoveredEggs.includes(egg);
+                  const active = activeEggs.includes(egg);
+                  return (
+                    <div key={egg} className={styles.discoveryRow}>
+                      <span>{discovered ? '✓' : '•'}</span>
+                      <span>{discovered ? EGG_LABELS[egg] : '???'}</span>
+                      <span>{active ? 'Active' : discovered ? 'Discovered' : 'Undiscovered'}</span>
+                      {active && (
+                        <button type="button" className={styles.clearButton} onClick={() => disableEasterEgg(egg)}>
+                          Disable
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
 
               {discoveredEggs.length > 0 && <button type="button" className={styles.clearButton} onClick={clearDiscoveries}>Clear discoveries</button>}
