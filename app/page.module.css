@@ -31,29 +31,41 @@
   opacity: 0.8;
 }
 
+.settingsButton,
 .devButton {
   position: absolute;
   top: 50%;
-  right: 1.5rem;
   transform: translateY(-50%);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   min-height: 42px;
-  padding: 0.65rem 1rem;
   border: 1px solid currentColor;
   border-radius: 0.6rem;
   color: inherit;
   background: rgba(255, 255, 255, 0.12);
   text-decoration: none;
   font-weight: 700;
+}
+
+.settingsButton {
+  left: 1.5rem;
+  width: 42px;
+  font-size: 1.15rem;
+}
+
+.devButton {
+  right: 1.5rem;
+  padding: 0.65rem 1rem;
   white-space: nowrap;
 }
 
+.settingsButton:hover,
 .devButton:hover {
   background: rgba(255, 255, 255, 0.22);
 }
 
+.settingsButton:active,
 .devButton:active {
   transform: translateY(-50%) scale(0.98);
 }
@@ -116,15 +128,29 @@
   }
 
   .headerTitle {
-    padding: 0;
+    padding: 0 3.5rem;
   }
 
+  .settingsButton,
   .devButton {
     position: static;
     transform: none;
-    margin: 1rem auto 0;
+    margin-top: 0.75rem;
   }
 
+  .settingsButton {
+    position: absolute;
+    left: 1rem;
+    top: 1rem;
+    margin: 0;
+  }
+
+  .devButton {
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .settingsButton:active,
   .devButton:active {
     transform: scale(0.98);
   }
