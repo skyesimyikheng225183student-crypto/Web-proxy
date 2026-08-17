@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import styles from './BrowserFrame.module.css';
 
 interface BrowserFrameProps {
@@ -19,9 +19,10 @@ interface ProxyDebugMessage {
 
 const BrowserFrame = ({ url, onLoad, onError }: BrowserFrameProps) => {
   const [iframeKey, setIframeKey] = useState(0);
-  const [loadTimeout, setLoadTimeout] = useState<NodeJS.Timeout | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
   const [showLogs, setShowLogs] = useState(true);
+  const loadTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const loadedRef = useRef(false);
   const proxyUrl = `/api/proxy?url=${encodeURIComponent(url)}`;
 
   useEffect(() => {
@@ -41,11 +42,15 @@ const BrowserFrame = ({ url, onLoad, onError }: BrowserFrameProps) => {
   }, []);
 
   useEffect(() => {
+    loadedRef.current = false;
     setIframeKey(prev => prev + 1);
     setLogs([`Loading ${url}...`]);
     setShowLogs(true);
 
-    const timeout = setTimeout(() => {
+    if (loadTimeoutRef.current) clearTimeout(loadTimeoutRef.current);
+
+    loadTimeoutRef.current = setTimeout(() => {
+      if (loadedRef.current) return;
       setLogs(prev => [
         ...prev,
         'ERROR: Page took too long to load (10s timeout)',
@@ -57,18 +62,30 @@ const BrowserFrame = ({ url, onLoad, onError }: BrowserFrameProps) => {
       onError('Page load timeout - check logs below');
     }, 10000);
 
-    setLoadTimeout(timeout);
-    return () => clearTimeout(timeout);
-  }, [url, onError]);
+    return () => {
+      if (loadTimeoutRef.current) {
+        clearTimeout(loadTimeoutRef.current);
+        loadTimeoutRef.current = null;
+      }
+    };
+  }, [url]);
 
   const handleIframeLoad = () => {
-    if (loadTimeout) clearTimeout(loadTimeout);
+    loadedRef.current = true;
+    if (loadTimeoutRef.current) {
+      clearTimeout(loadTimeoutRef.current);
+      loadTimeoutRef.current = null;
+    }
     setLogs(prev => [...prev, 'SUCCESS: Page loaded']);
     onLoad();
   };
 
   const handleIframeError = () => {
-    if (loadTimeout) clearTimeout(loadTimeout);
+    loadedRef.current = true;
+    if (loadTimeoutRef.current) {
+      clearTimeout(loadTimeoutRef.current);
+      loadTimeoutRef.current = null;
+    }
     setLogs(prev => [...prev, 'ERROR: Failed to load the website', 'The page may be blocked or unavailable.']);
     onError('Failed to load the website. It may be blocked or unavailable.');
   };
