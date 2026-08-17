@@ -5,9 +5,10 @@ import styles from './ProxyForm.module.css';
 
 interface ProxyFormProps {
   onRequest: (url: string) => void;
+  onSpecialInput?: (value: string) => boolean;
 }
 
-const ProxyForm = ({ onRequest }: ProxyFormProps) => {
+const ProxyForm = ({ onRequest, onSpecialInput }: ProxyFormProps) => {
   const [inputValue, setInputValue] = useState('');
   const [isValid, setIsValid] = useState(true);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -25,6 +26,12 @@ const ProxyForm = ({ onRequest }: ProxyFormProps) => {
 
   const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+
+    if (onSpecialInput?.(inputValue)) {
+      setInputValue('');
+      setIsValid(true);
+      return;
+    }
 
     if (!validateUrl(inputValue)) {
       setIsValid(false);
