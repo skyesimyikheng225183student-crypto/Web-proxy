@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import ProxyForm from '@/components/ProxyForm';
 import BrowserFrame from '@/components/BrowserFrame';
@@ -93,6 +94,9 @@ export default function Home() {
       data-easter-eggs-discovered={discoveredEggs.length}
     >
       <header className={styles.header} role="banner">
+        <Link href="/settings" className={styles.settingsButton} aria-label="Open settings">
+          ⚙
+        </Link>
         <div className={styles.headerTitle}>
           <h1>Web Proxy test</h1>
           <p>currently testin, dont expect much.</p>
