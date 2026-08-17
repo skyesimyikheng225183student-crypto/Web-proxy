@@ -38,7 +38,6 @@ body,
   -webkit-touch-callout: none;
 }
 
-/* Accessibility: Focus states */
 a:focus-visible,
 button:focus-visible,
 input:focus-visible,
@@ -48,14 +47,12 @@ select:focus-visible {
   outline-offset: 2px;
 }
 
-/* Remove default input focus outline */
 input:focus,
 textarea:focus,
 select:focus {
   outline: none;
 }
 
-/* Prefers reduced motion */
 @media (prefers-reduced-motion: reduce) {
   * {
     animation-duration: 0.01ms !important;
@@ -64,7 +61,7 @@ select:focus {
   }
 }
 
-/* Easter eggs: effects are temporary and purely visual. */
+/* Easter eggs stay enabled until the user presses Disable. */
 .egg-terminal {
   filter: contrast(1.15);
 }
@@ -81,7 +78,6 @@ select:focus {
   color: #7cff7c;
   font: 700 clamp(1rem, 3vw, 2rem)/1.5 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   letter-spacing: 0.08em;
-  animation: egg-terminal-in 3s steps(6, end) forwards;
   pointer-events: none;
 }
 
@@ -96,7 +92,6 @@ select:focus {
   z-index: 9998;
   pointer-events: none;
   background: repeating-linear-gradient(to bottom, transparent 0, transparent 3px, rgba(0, 0, 0, 0.12) 4px);
-  animation: egg-retro-flicker 3s linear forwards;
 }
 
 .egg-glitch {
@@ -118,11 +113,15 @@ select:focus {
   font: 700 1rem/1.4 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   text-align: center;
   pointer-events: none;
-  animation: egg-glitch-message 1.8s steps(4, end) forwards;
 }
 
 .egg-barrel-roll {
-  animation: egg-barrel-roll 1.1s cubic-bezier(0.2, 0.8, 0.3, 1) both;
+  animation: egg-barrel-roll 1.1s cubic-bezier(0.2, 0.8, 0.3, 1) infinite;
+  transform-origin: center center;
+}
+
+.egg-do-a-flip {
+  animation: egg-do-a-flip 1.2s cubic-bezier(0.2, 0.8, 0.3, 1) infinite;
   transform-origin: center center;
 }
 
@@ -146,18 +145,6 @@ select:focus {
   animation: egg-shatter-message 2.6s ease forwards;
 }
 
-@keyframes egg-terminal-in {
-  0% { opacity: 0; clip-path: inset(50% 0); }
-  20% { opacity: 1; clip-path: inset(0); }
-  75% { opacity: 1; }
-  100% { opacity: 0; clip-path: inset(50% 0); }
-}
-
-@keyframes egg-retro-flicker {
-  0%, 100% { opacity: 0; }
-  10%, 85% { opacity: 1; }
-}
-
 @keyframes egg-glitch {
   0% { transform: translate(0); filter: none; }
   25% { transform: translate(4px, -2px); filter: hue-rotate(35deg) contrast(1.5); }
@@ -166,16 +153,15 @@ select:focus {
   100% { transform: translate(0); filter: none; }
 }
 
-@keyframes egg-glitch-message {
-  0%, 100% { opacity: 0; clip-path: inset(45% 0); }
-  12%, 82% { opacity: 1; clip-path: inset(0); }
-  30% { transform: translate(calc(-50% + 8px), -50%); }
-  60% { transform: translate(calc(-50% - 7px), -50%); }
-}
-
 @keyframes egg-barrel-roll {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
+}
+
+@keyframes egg-do-a-flip {
+  0%, 100% { transform: rotateX(0deg); }
+  45% { transform: rotateX(180deg); }
+  55% { transform: rotateX(180deg); }
 }
 
 @keyframes egg-shatter {
