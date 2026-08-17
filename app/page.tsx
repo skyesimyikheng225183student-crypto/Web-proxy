@@ -12,11 +12,19 @@ import {
   type EasterEgg,
 } from '@/lib/easterEggs';
 
+const EFFECT_DURATION: Record<EasterEgg, number> = {
+  terminal: 3000,
+  glitch: 1800,
+  retro: 3000,
+  barrelRoll: 1100,
+};
+
 export default function Home() {
   const [url, setUrl] = useState<string>('');
   const [error, setError] = useState<string>('');
   const [activeEggs, setActiveEggs] = useState<EasterEgg[]>([]);
   const [easterEggCombo, setEasterEggCombo] = useState(false);
+  const [discoveredEggs, setDiscoveredEggs] = useState<EasterEgg[]>([]);
 
   const handleProxyRequest = async (targetUrl: string) => {
     setUrl(targetUrl);
@@ -33,11 +41,20 @@ export default function Home() {
 
   const triggerEasterEgg = (egg: EasterEgg) => {
     const discovered = discoverEasterEgg(egg);
+    setDiscoveredEggs(discovered);
     setActiveEggs((current) => [...current.filter((item) => item !== egg), egg]);
+
+    window.setTimeout(() => {
+      setActiveEggs((current) => current.filter((item) => item !== egg));
+    }, EFFECT_DURATION[egg]);
 
     if (allCoreEasterEggsDiscovered(discovered)) {
       setEasterEggCombo(true);
-      window.setTimeout(() => setEasterEggCombo(false), 2600);
+      setActiveEggs(['terminal', 'glitch', 'retro', 'barrelRoll']);
+      window.setTimeout(() => {
+        setEasterEggCombo(false);
+        setActiveEggs([]);
+      }, 2600);
     }
   };
 
@@ -47,6 +64,10 @@ export default function Home() {
     triggerEasterEgg(egg);
     return true;
   };
+
+  useEffect(() => {
+    setDiscoveredEggs(getDiscoveredEasterEggs());
+  }, []);
 
   useEffect(() => {
     const handleDeviceOrientation = (event: DeviceOrientationEvent) => {
@@ -59,11 +80,6 @@ export default function Home() {
     return () => window.removeEventListener('deviceorientation', handleDeviceOrientation);
   }, []);
 
-  useEffect(() => {
-    const discovered = getDiscoveredEasterEggs();
-    if (discovered.length) setActiveEggs(discovered);
-  }, []);
-
   return (
     <div
       className={[
@@ -74,6 +90,7 @@ export default function Home() {
         activeEggs.includes('barrelRoll') ? 'egg-barrel-roll' : '',
         easterEggCombo ? 'egg-shatter-combo' : '',
       ].filter(Boolean).join(' ')}
+      data-easter-eggs-discovered={discoveredEggs.length}
     >
       <header className={styles.header} role="banner">
         <div className={styles.headerTitle}>
