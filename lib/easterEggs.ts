@@ -1,8 +1,9 @@
 export const EASTER_EGG_CODES = {
-  terminal: 'TERMINAL_1984',
-  glitch: 'DVCtz3fKopNpXd3cbhEypeaLfDnhZMB5be9jUsE1dWgeMPKqV1TW',
-  retro: 'RETRO_1999',
-  barrelRoll: 'BARREL_ROLL',
+  barrelRoll: 'barrel roll',
+  doAFlip: 'do_a_flip',
+  glitch: 'unstable_not_smp',
+  terminal: 'ye_olde',
+  retro: 'arcade',
 } as const;
 
 export type EasterEgg = keyof typeof EASTER_EGG_CODES;
@@ -10,9 +11,9 @@ export type EasterEgg = keyof typeof EASTER_EGG_CODES;
 const STORAGE_KEY = 'web-proxy-easter-eggs';
 
 export function findEasterEgg(input: string): EasterEgg | null {
-  const normalized = input.trim();
+  const normalized = input.trim().toLowerCase();
   const entry = (Object.entries(EASTER_EGG_CODES) as [EasterEgg, string][]).find(
-    ([, code]) => code === normalized,
+    ([, code]) => code.toLowerCase() === normalized,
   );
   return entry?.[0] ?? null;
 }
